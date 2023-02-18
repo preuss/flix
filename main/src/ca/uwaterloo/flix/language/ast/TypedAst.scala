@@ -16,44 +16,57 @@
 
 package ca.uwaterloo.flix.language.ast
 
+import ca.uwaterloo.flix.language.CompilationMessage
+import ca.uwaterloo.flix.language.ast.Ast.{Denotation, EliminatedBy, Source}
+import ca.uwaterloo.flix.language.dbg.{FormatExpression, FormatPattern}
+import ca.uwaterloo.flix.language.phase.Lowering
+import ca.uwaterloo.flix.util.collection.MultiMap
+
 import java.lang.reflect.{Constructor, Field, Method}
-
-import ca.uwaterloo.flix.language.ast.Ast.{Denotation, Source}
-import ca.uwaterloo.flix.language.debug.{FormatExpression, FormatPattern}
-
-import scala.collection.immutable.List
 
 object TypedAst {
 
-  case class Root(classes: Map[Symbol.ClassSym, TypedAst.Class],
+  case class Root(modules: Map[Symbol.ModuleSym, List[Symbol]],
+                  classes: Map[Symbol.ClassSym, TypedAst.Class],
                   instances: Map[Symbol.ClassSym, List[TypedAst.Instance]],
                   sigs: Map[Symbol.SigSym, TypedAst.Sig],
                   defs: Map[Symbol.DefnSym, TypedAst.Def],
                   enums: Map[Symbol.EnumSym, TypedAst.Enum],
-                  latticeOps: Map[Type, TypedAst.LatticeOps],
-                  properties: List[TypedAst.Property],
-                  specialOps: Map[SpecialOperator, Map[Type, Symbol.DefnSym]],
-                  reachable: Set[Symbol.DefnSym],
+                  restrictableEnums: Map[Symbol.RestrictableEnumSym, TypedAst.RestrictableEnum],
+                  effects: Map[Symbol.EffectSym, TypedAst.Effect],
+                  typeAliases: Map[Symbol.TypeAliasSym, TypedAst.TypeAlias],
+                  uses: Map[Symbol.ModuleSym, List[Ast.UseOrImport]],
+                  entryPoint: Option[Symbol.DefnSym],
                   sources: Map[Source, SourceLocation],
-                  classEnv: Map[Symbol.ClassSym, Ast.ClassContext])
+                  classEnv: Map[Symbol.ClassSym, Ast.ClassContext],
+                  names: MultiMap[List[String], String])
 
-  // TODO use TypedAst.Law for laws
-  case class Class(doc: Ast.Doc, mod: Ast.Modifiers, sym: Symbol.ClassSym, tparam: TypedAst.TypeParam, superClasses: List[Symbol.ClassSym], signatures: List[TypedAst.Sig], laws: List[TypedAst.Def], loc: SourceLocation)
+  case class Class(doc: Ast.Doc, ann: Ast.Annotations, mod: Ast.Modifiers, sym: Symbol.ClassSym, tparam: TypedAst.TypeParam, superClasses: List[Ast.TypeConstraint], signatures: List[TypedAst.Sig], laws: List[TypedAst.Def], loc: SourceLocation)
 
-  case class Instance(doc: Ast.Doc, mod: Ast.Modifiers, sym: Symbol.ClassSym, tpe: Type, tconstrs: List[Ast.TypeConstraint], defs: List[TypedAst.Def], ns: Name.NName, loc: SourceLocation)
+  case class Instance(doc: Ast.Doc, ann: Ast.Annotations, mod: Ast.Modifiers, clazz: Ast.ClassSymUse, tpe: Type, tconstrs: List[Ast.TypeConstraint], defs: List[TypedAst.Def], ns: Name.NName, loc: SourceLocation)
 
-  case class Sig(doc: Ast.Doc, ann: List[TypedAst.Annotation], mod: Ast.Modifiers, sym: Symbol.SigSym, tparams: List[TypedAst.TypeParam], fparams: List[TypedAst.FormalParam], sc: Scheme, eff: Type, loc: SourceLocation)
+  case class Sig(sym: Symbol.SigSym, spec: TypedAst.Spec, impl: Option[TypedAst.Impl])
 
-  case class Def(doc: Ast.Doc, ann: List[TypedAst.Annotation], mod: Ast.Modifiers, sym: Symbol.DefnSym, tparams: List[TypedAst.TypeParam], fparams: List[TypedAst.FormalParam], exp: TypedAst.Expression, declaredScheme: Scheme, inferredScheme: Scheme, eff: Type, loc: SourceLocation)
+  case class Def(sym: Symbol.DefnSym, spec: TypedAst.Spec, impl: TypedAst.Impl)
 
-  case class Enum(doc: Ast.Doc, mod: Ast.Modifiers, sym: Symbol.EnumSym, tparams: List[TypedAst.TypeParam], cases: Map[Name.Tag, TypedAst.Case], tpeDeprecated: Type, sc: Scheme, loc: SourceLocation)
+  case class Spec(doc: Ast.Doc, ann: Ast.Annotations, mod: Ast.Modifiers, tparams: List[TypedAst.TypeParam], fparams: List[TypedAst.FormalParam], declaredScheme: Scheme, retTpe: Type, pur: Type, eff: Type, tconstrs: List[Ast.TypeConstraint], loc: SourceLocation)
 
-  case class Property(law: Symbol.DefnSym, defn: Symbol.DefnSym, exp: TypedAst.Expression, loc: SourceLocation)
+  case class Impl(exp: TypedAst.Expression, inferredScheme: Scheme)
 
-  case class LatticeOps(tpe: Type, bot: Symbol.DefnSym, equ: Symbol.DefnSym, leq: Symbol.DefnSym, lub: Symbol.DefnSym, glb: Symbol.DefnSym)
+  case class Enum(doc: Ast.Doc, ann: Ast.Annotations, mod: Ast.Modifiers, sym: Symbol.EnumSym, tparams: List[TypedAst.TypeParam], derives: List[Ast.Derivation], cases: Map[Symbol.CaseSym, TypedAst.Case], tpeDeprecated: Type, loc: SourceLocation)
 
-  sealed trait Expression {
+  case class RestrictableEnum(doc: Ast.Doc, ann: Ast.Annotations, mod: Ast.Modifiers, sym: Symbol.RestrictableEnumSym, index: TypedAst.TypeParam, tparams: List[TypedAst.TypeParam], derives: List[Ast.Derivation], cases: Map[Symbol.RestrictableCaseSym, TypedAst.RestrictableCase], tpeDeprecated: Type, loc: SourceLocation)
+
+  case class TypeAlias(doc: Ast.Doc, mod: Ast.Modifiers, sym: Symbol.TypeAliasSym, tparams: List[TypedAst.TypeParam], tpe: Type, loc: SourceLocation)
+
+  case class Effect(doc: Ast.Doc, ann: Ast.Annotations, mod: Ast.Modifiers, sym: Symbol.EffectSym, ops: List[TypedAst.Op], loc: SourceLocation)
+
+  case class Op(sym: Symbol.OpSym, spec: TypedAst.Spec)
+
+  sealed trait Expression extends Product {
     def tpe: Type
+
+    def pur: Type
 
     def eff: Type
 
@@ -64,225 +77,252 @@ object TypedAst {
 
   object Expression {
 
-    case class Unit(loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.Unit
+    case class Cst(cst: Ast.Constant, tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
+      def pur: Type = Type.Pure
 
-      def eff: Type = Type.Pure
-    }
-
-    case class Null(tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
-      def eff: Type = Type.Pure
-    }
-
-    case class True(loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.Bool
-
-      def eff: Type = Type.Pure
-    }
-
-    case class False(loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.Bool
-
-      def eff: Type = Type.Pure
-    }
-
-    case class Char(lit: scala.Char, loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.Char
-
-      def eff: Type = Type.Pure
-    }
-
-    case class Float32(lit: scala.Float, loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.Float32
-
-      def eff: Type = Type.Pure
-    }
-
-    case class Float64(lit: scala.Double, loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.Float64
-
-      def eff: Type = Type.Pure
-    }
-
-    case class Int8(lit: scala.Byte, loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.Int8
-
-      def eff: Type = Type.Pure
-    }
-
-    case class Int16(lit: scala.Short, loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.Int16
-
-      def eff: Type = Type.Pure
-    }
-
-    case class Int32(lit: scala.Int, loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.Int32
-
-      def eff: Type = Type.Pure
-    }
-
-    case class Int64(lit: scala.Long, loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.Int64
-
-      def eff: Type = Type.Pure
-    }
-
-    case class BigInt(lit: java.math.BigInteger, loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.BigInt
-
-      def eff: Type = Type.Pure
-    }
-
-    case class Str(lit: java.lang.String, loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.Str
-
-      def eff: Type = Type.Pure
-    }
-
-    case class Default(tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
-      def eff: Type = Type.Pure
+      def eff: Type = Type.Empty
     }
 
     case class Wild(tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
-      def eff: Type = Type.Pure
+      def pur: Type = Type.Pure
+
+      def eff: Type = Type.Empty
     }
 
     case class Var(sym: Symbol.VarSym, tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
-      def eff: Type = Type.Pure
+      def pur: Type = Type.Pure
+
+      def eff: Type = Type.Empty
     }
 
     case class Def(sym: Symbol.DefnSym, tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
-      def eff: Type = Type.Pure
+      def pur: Type = Type.Pure
+
+      def eff: Type = Type.Empty
     }
 
     case class Sig(sym: Symbol.SigSym, tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
-      def eff: Type = Type.Pure
+      def pur: Type = Type.Pure
+
+      def eff: Type = Type.Empty
     }
 
-    case class Hole(sym: Symbol.HoleSym, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Hole(sym: Symbol.HoleSym, tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
+      def pur: Type = Type.Pure
+
+      def eff: Type = Type.Empty
+    }
+
+    case class HoleWithExp(exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class OpenAs(sym: Symbol.RestrictableEnumSym, exp: TypedAst.Expression, tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
+      def pur: Type = exp.pur
+
+      def eff: Type = exp.eff
+    }
+
+    case class Use(sym: Symbol, exp: TypedAst.Expression, loc: SourceLocation) extends TypedAst.Expression {
+      def tpe: Type = exp.tpe
+
+      def pur: Type = exp.pur
+
+      def eff: Type = exp.eff
+    }
 
     case class Lambda(fparam: TypedAst.FormalParam, exp: TypedAst.Expression, tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
-      def eff: Type = Type.Pure
+      def pur: Type = Type.Pure
+
+      def eff: Type = Type.Empty
     }
 
-    case class Apply(exp: TypedAst.Expression, exps: List[TypedAst.Expression], tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Apply(exp: TypedAst.Expression, exps: List[TypedAst.Expression], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class Unary(sop: SemanticOperator, exp: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Unary(sop: SemanticOperator, exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class Binary(sop: SemanticOperator, exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Binary(sop: SemanticOperator, exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class Let(sym: Symbol.VarSym, exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Let(sym: Symbol.VarSym, mod: Ast.Modifiers, exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class IfThenElse(exp1: TypedAst.Expression, exp2: TypedAst.Expression, exp3: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class LetRec(sym: Symbol.VarSym, mod: Ast.Modifiers, exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class Stm(exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Region(tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
+      def pur: Type = Type.Pure
 
-    case class Match(exp: TypedAst.Expression, rules: List[TypedAst.MatchRule], tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+      def eff: Type = Type.Empty
+    }
 
-    case class Choose(exps: List[TypedAst.Expression], rules: List[TypedAst.ChoiceRule], tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Scope(sym: Symbol.VarSym, regionVar: Type.Var, exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class Tag(sym: Symbol.EnumSym, tag: Name.Tag, exp: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class ScopeExit(exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class Tuple(elms: List[TypedAst.Expression], tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class IfThenElse(exp1: TypedAst.Expression, exp2: TypedAst.Expression, exp3: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class Stm(exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class Discard(exp: TypedAst.Expression, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression {
+      def tpe: Type = Type.mkUnit(loc)
+    }
+
+    case class Match(exp: TypedAst.Expression, rules: List[TypedAst.MatchRule], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class TypeMatch(exp: TypedAst.Expression, rules: List[TypedAst.MatchTypeRule], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class RelationalChoose(exps: List[TypedAst.Expression], rules: List[TypedAst.RelationalChoiceRule], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class RestrictableChoose(star: Boolean, exp: TypedAst.Expression, rules: List[TypedAst.RestrictableChoiceRule], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class Tag(sym: Ast.CaseSymUse, exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class RestrictableTag(sym: Ast.RestrictableCaseSymUse, exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class Tuple(elms: List[TypedAst.Expression], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
     case class RecordEmpty(tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
-      def eff: Type = Type.Pure
+      def pur: Type = Type.Pure
+
+      def eff: Type = Type.Empty
     }
 
-    case class RecordSelect(exp: TypedAst.Expression, field: Name.Field, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class RecordSelect(exp: TypedAst.Expression, field: Name.Field, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class RecordExtend(field: Name.Field, value: TypedAst.Expression, rest: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class RecordExtend(field: Name.Field, value: TypedAst.Expression, rest: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class RecordRestrict(field: Name.Field, rest: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class RecordRestrict(field: Name.Field, rest: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class ArrayLit(elms: List[TypedAst.Expression], tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class ArrayLit(exps: List[TypedAst.Expression], exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class ArrayNew(elm: TypedAst.Expression, len: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class ArrayNew(exp1: TypedAst.Expression, exp2: TypedAst.Expression, exp3: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class ArrayLoad(base: TypedAst.Expression, index: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class ArrayLoad(base: TypedAst.Expression, index: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class ArrayLength(base: TypedAst.Expression, eff: Type, loc: SourceLocation) extends TypedAst.Expression {
+    case class ArrayLength(base: TypedAst.Expression, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression {
       def tpe: Type = Type.Int32
     }
 
-    case class ArrayStore(base: TypedAst.Expression, index: TypedAst.Expression, elm: TypedAst.Expression, loc: SourceLocation) extends TypedAst.Expression {
+    case class ArrayStore(base: TypedAst.Expression, index: TypedAst.Expression, elm: TypedAst.Expression, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression {
       def tpe: Type = Type.Unit
-
-      def eff: Type = Type.Impure
     }
 
-    case class ArraySlice(base: TypedAst.Expression, beginIndex: TypedAst.Expression, endIndex: TypedAst.Expression, tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
-      def eff: Type = Type.Impure
+    case class ArraySlice(region: TypedAst.Expression, base: TypedAst.Expression, beginIndex: TypedAst.Expression, endIndex: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class VectorLit(exps: List[TypedAst.Expression], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class VectorLoad(exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class VectorLength(exp: TypedAst.Expression, loc: SourceLocation) extends TypedAst.Expression {
+      def pur: Type = exp.pur
+      def eff: Type = exp.eff
+      def tpe: Type = Type.Int32
     }
 
-    case class Ref(exp: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Ref(exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class Deref(exp: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Deref(exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class Assign(exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Assign(exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class Existential(fparam: TypedAst.FormalParam, exp: TypedAst.Expression, loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.Bool
+    case class Ascribe(exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-      def eff: Type = Type.Pure
+    case class Of(sym: Ast.RestrictableCaseSymUse, exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class Cast(exp: TypedAst.Expression, declaredType: Option[Type], declaredPur: Option[Type], declaredEff: Option[Type], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    @EliminatedBy(Lowering.getClass)
+    case class Mask(exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class Upcast(exp: TypedAst.Expression, tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
+      override def pur: Type = exp.pur
+
+      override def eff: Type = exp.eff
     }
 
-    case class Universal(fparam: TypedAst.FormalParam, exp: TypedAst.Expression, loc: SourceLocation) extends TypedAst.Expression {
-      def tpe: Type = Type.Bool
+    case class Supercast(exp: TypedAst.Expression, tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
+      override def pur: Type = exp.pur
 
-      def eff: Type = Type.Pure
+      override def eff: Type = exp.eff
     }
 
-    case class Ascribe(exp: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Without(exp: TypedAst.Expression, effUse: Ast.EffectSymUse, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class Cast(exp: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class TryCatch(exp: TypedAst.Expression, rules: List[TypedAst.CatchRule], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class TryCatch(exp: TypedAst.Expression, rules: List[TypedAst.CatchRule], tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class TryWith(exp: TypedAst.Expression, effUse: Ast.EffectSymUse, rules: List[TypedAst.HandlerRule], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class InvokeConstructor(constructor: Constructor[_], args: List[TypedAst.Expression], tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Do(op: Ast.OpSymUse, exps: List[TypedAst.Expression], pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression {
+      def tpe: Type = Type.Unit
+    }
 
-    case class InvokeMethod(method: Method, exp: TypedAst.Expression, args: List[TypedAst.Expression], tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Resume(exp: TypedAst.Expression, tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
+      def pur: Type = Type.Pure
 
-    case class InvokeStaticMethod(method: Method, args: List[TypedAst.Expression], tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+      def eff: Type = Type.Empty
+    }
 
-    case class GetField(field: Field, exp: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class InvokeConstructor(constructor: Constructor[_], args: List[TypedAst.Expression], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class PutField(field: Field, exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class InvokeMethod(method: Method, exp: TypedAst.Expression, args: List[TypedAst.Expression], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class GetStaticField(field: Field, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class InvokeStaticMethod(method: Method, args: List[TypedAst.Expression], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class PutStaticField(field: Field, exp: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class GetField(field: Field, exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class NewChannel(exp: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class PutField(field: Field, exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class GetChannel(exp: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class GetStaticField(field: Field, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class PutChannel(exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class PutStaticField(field: Field, exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class SelectChannel(rules: List[TypedAst.SelectChannelRule], default: Option[TypedAst.Expression], tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class NewObject(name: String, clazz: java.lang.Class[_], tpe: Type, pur: Type, eff: Type, methods: List[TypedAst.JvmMethod], loc: SourceLocation) extends TypedAst.Expression
 
-    case class Spawn(exp: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class NewChannel(exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class GetChannel(exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class PutChannel(exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class SelectChannel(rules: List[TypedAst.SelectChannelRule], default: Option[TypedAst.Expression], tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class Spawn(exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class Par(exp: TypedAst.Expression, loc: SourceLocation) extends TypedAst.Expression {
+      def tpe: Type = exp.tpe
+
+      def pur: Type = exp.pur
+
+      def eff: Type = exp.eff
+    }
+
+    case class ParYield(frags: List[TypedAst.ParYieldFragment], exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
     case class Lazy(exp: TypedAst.Expression, tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
-      def eff: Type = Type.Pure
+      def pur: Type = Type.Pure
+
+      def eff: Type = Type.Empty
     }
 
-    case class Force(exp: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class Force(exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
     case class FixpointConstraintSet(cs: List[TypedAst.Constraint], stf: Ast.Stratification, tpe: Type, loc: SourceLocation) extends TypedAst.Expression {
-      def eff: Type = Type.Pure
+      def pur: Type = Type.Pure
+
+      def eff: Type = Type.Empty
     }
 
-    case class FixpointCompose(exp1: TypedAst.Expression, exp2: TypedAst.Expression, stf: Ast.Stratification, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class FixpointLambda(pparams: List[TypedAst.PredicateParam], exp: TypedAst.Expression, stf: Ast.Stratification, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class FixpointSolve(exp: TypedAst.Expression, stf: Ast.Stratification, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class FixpointMerge(exp1: TypedAst.Expression, exp2: TypedAst.Expression, stf: Ast.Stratification, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class FixpointProject(pred: Name.Pred, exp: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class FixpointSolve(exp: TypedAst.Expression, stf: Ast.Stratification, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class FixpointEntails(exp1: TypedAst.Expression, exp2: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class FixpointFilter(pred: Name.Pred, exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
 
-    case class FixpointFold(pred: Name.Pred, exp1: TypedAst.Expression, exp2: TypedAst.Expression, exp3: TypedAst.Expression, tpe: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+    case class FixpointInject(exp: TypedAst.Expression, pred: Name.Pred, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class FixpointProject(pred: Name.Pred, exp: TypedAst.Expression, tpe: Type, pur: Type, eff: Type, loc: SourceLocation) extends TypedAst.Expression
+
+    case class Error(m: CompilationMessage, tpe: Type, pur: Type, eff: Type) extends TypedAst.Expression {
+      override def loc: SourceLocation = m.loc
+    }
 
   }
 
@@ -300,77 +340,39 @@ object TypedAst {
 
     case class Var(sym: Symbol.VarSym, tpe: Type, loc: SourceLocation) extends TypedAst.Pattern
 
-    case class Unit(loc: SourceLocation) extends TypedAst.Pattern {
-      def tpe: Type = Type.Unit
-    }
+    case class Cst(cst: Ast.Constant, tpe: Type, loc: SourceLocation) extends TypedAst.Pattern
 
-    case class True(loc: SourceLocation) extends TypedAst.Pattern {
-      def tpe: Type = Type.Bool
-    }
-
-    case class False(loc: SourceLocation) extends TypedAst.Pattern {
-      def tpe: Type = Type.Bool
-    }
-
-    case class Char(lit: scala.Char, loc: SourceLocation) extends TypedAst.Pattern {
-      def tpe: Type = Type.Char
-    }
-
-    case class Float32(lit: scala.Float, loc: SourceLocation) extends TypedAst.Pattern {
-      def tpe: Type = Type.Float32
-    }
-
-    case class Float64(lit: scala.Double, loc: SourceLocation) extends TypedAst.Pattern {
-      def tpe: Type = Type.Float64
-    }
-
-    case class Int8(lit: scala.Byte, loc: SourceLocation) extends TypedAst.Pattern {
-      def tpe: Type = Type.Int8
-    }
-
-    case class Int16(lit: scala.Short, loc: SourceLocation) extends TypedAst.Pattern {
-      def tpe: Type = Type.Int16
-    }
-
-    case class Int32(lit: scala.Int, loc: SourceLocation) extends TypedAst.Pattern {
-      def tpe: Type = Type.Int32
-    }
-
-    case class Int64(lit: scala.Long, loc: SourceLocation) extends TypedAst.Pattern {
-      def tpe: Type = Type.Int64
-    }
-
-    case class BigInt(lit: java.math.BigInteger, loc: SourceLocation) extends TypedAst.Pattern {
-      def tpe: Type = Type.BigInt
-    }
-
-    case class Str(lit: java.lang.String, loc: SourceLocation) extends TypedAst.Pattern {
-      def tpe: Type = Type.Str
-    }
-
-    case class Tag(sym: Symbol.EnumSym, tag: Name.Tag, pat: TypedAst.Pattern, tpe: Type, loc: SourceLocation) extends TypedAst.Pattern
+    case class Tag(sym: Ast.CaseSymUse, pat: TypedAst.Pattern, tpe: Type, loc: SourceLocation) extends TypedAst.Pattern
 
     case class Tuple(elms: List[TypedAst.Pattern], tpe: Type, loc: SourceLocation) extends TypedAst.Pattern
 
-    case class Array(elms: List[TypedAst.Pattern], tpe: Type, loc: SourceLocation) extends TypedAst.Pattern
-
-    case class ArrayTailSpread(elms: List[TypedAst.Pattern], sym: Symbol.VarSym, tpe: Type, loc: SourceLocation) extends TypedAst.Pattern
-
-    case class ArrayHeadSpread(sym: Symbol.VarSym, elms: List[TypedAst.Pattern], tpe: Type, loc: SourceLocation) extends TypedAst.Pattern
-
   }
 
-  sealed trait ChoicePattern {
+  sealed trait RelationalChoicePattern {
     def loc: SourceLocation
   }
 
-  object ChoicePattern {
+  object RelationalChoicePattern {
 
-    case class Wild(loc: SourceLocation) extends ChoicePattern
+    case class Wild(loc: SourceLocation) extends RelationalChoicePattern
 
-    case class Absent(loc: SourceLocation) extends ChoicePattern
+    case class Absent(loc: SourceLocation) extends RelationalChoicePattern
 
-    case class Present(sym: Symbol.VarSym, tpe: Type, loc: SourceLocation) extends ChoicePattern
+    case class Present(sym: Symbol.VarSym, tpe: Type, loc: SourceLocation) extends RelationalChoicePattern
+
+  }
+
+  sealed trait RestrictableChoicePattern
+
+  object RestrictableChoicePattern {
+
+    sealed trait VarOrWild
+
+    case class Wild(tpe: Type, loc: SourceLocation) extends VarOrWild
+
+    case class Var(sym: Symbol.VarSym, tpe: Type, loc: SourceLocation) extends VarOrWild
+
+    case class Tag(sym: Ast.RestrictableCaseSymUse, pat: List[VarOrWild], tpe: Type, loc: SourceLocation) extends RestrictableChoicePattern
 
   }
 
@@ -386,56 +388,54 @@ object TypedAst {
 
       case class Atom(pred: Name.Pred, den: Denotation, terms: List[TypedAst.Expression], tpe: Type, loc: SourceLocation) extends TypedAst.Predicate.Head
 
-      case class Union(exp: TypedAst.Expression, tpe: Type, loc: SourceLocation) extends TypedAst.Predicate.Head
-
     }
 
     sealed trait Body extends TypedAst.Predicate
 
     object Body {
 
-      case class Atom(pred: Name.Pred, den: Denotation, polarity: Ast.Polarity, terms: List[TypedAst.Pattern], tpe: Type, loc: SourceLocation) extends TypedAst.Predicate.Body
+      case class Atom(pred: Name.Pred, den: Denotation, polarity: Ast.Polarity, fixity: Ast.Fixity, terms: List[TypedAst.Pattern], tpe: Type, loc: SourceLocation) extends TypedAst.Predicate.Body
 
       case class Guard(exp: TypedAst.Expression, loc: SourceLocation) extends TypedAst.Predicate.Body
+
+      case class Loop(varSyms: List[Symbol.VarSym], exp: TypedAst.Expression, loc: SourceLocation) extends TypedAst.Predicate.Body
 
     }
 
   }
 
-  case class Annotation(name: Ast.Annotation, args: List[TypedAst.Expression], loc: SourceLocation)
-
   case class Attribute(name: String, tpe: Type, loc: SourceLocation)
 
-  case class Case(sym: Symbol.EnumSym, tag: Name.Tag, tpeDeprecated: Type, sc: Scheme, loc: SourceLocation)
+  case class Case(sym: Symbol.CaseSym, tpe: Type, sc: Scheme, loc: SourceLocation)
+
+  case class RestrictableCase(sym: Symbol.RestrictableCaseSym, tpe: Type, sc: Scheme, loc: SourceLocation)
 
   case class Constraint(cparams: List[TypedAst.ConstraintParam], head: TypedAst.Predicate.Head, body: List[TypedAst.Predicate.Body], loc: SourceLocation)
 
-  sealed trait ConstraintParam {
-    def sym: Symbol.VarSym
+  case class ConstraintParam(sym: Symbol.VarSym, tpe: Type, loc: SourceLocation)
 
-    def tpe: Type
+  case class FormalParam(sym: Symbol.VarSym, mod: Ast.Modifiers, tpe: Type, src: Ast.TypeSource, loc: SourceLocation)
 
-    def loc: SourceLocation
-  }
+  case class PredicateParam(pred: Name.Pred, tpe: Type, loc: SourceLocation)
 
-  object ConstraintParam {
-
-    case class HeadParam(sym: Symbol.VarSym, tpe: Type, loc: SourceLocation) extends TypedAst.ConstraintParam
-
-    case class RuleParam(sym: Symbol.VarSym, tpe: Type, loc: SourceLocation) extends TypedAst.ConstraintParam
-
-  }
-
-  case class FormalParam(sym: Symbol.VarSym, mod: Ast.Modifiers, tpe: Type, loc: SourceLocation)
+  case class JvmMethod(ident: Name.Ident, fparams: List[TypedAst.FormalParam], exp: TypedAst.Expression, retTpe: Type, pur: Type, eff: Type, loc: SourceLocation)
 
   case class CatchRule(sym: Symbol.VarSym, clazz: java.lang.Class[_], exp: TypedAst.Expression)
 
-  case class ChoiceRule(pat: List[TypedAst.ChoicePattern], exp: TypedAst.Expression)
+  case class HandlerRule(op: Ast.OpSymUse, fparams: List[TypedAst.FormalParam], exp: TypedAst.Expression)
 
-  case class MatchRule(pat: TypedAst.Pattern, guard: TypedAst.Expression, exp: TypedAst.Expression)
+  case class RelationalChoiceRule(pat: List[TypedAst.RelationalChoicePattern], exp: TypedAst.Expression)
+
+  case class RestrictableChoiceRule(pat: TypedAst.RestrictableChoicePattern, exp: TypedAst.Expression)
+
+  case class MatchRule(pat: TypedAst.Pattern, guard: Option[TypedAst.Expression], exp: TypedAst.Expression)
+
+  case class MatchTypeRule(sym: Symbol.VarSym, tpe: Type, exp: TypedAst.Expression)
 
   case class SelectChannelRule(sym: Symbol.VarSym, chan: TypedAst.Expression, exp: TypedAst.Expression)
 
-  case class TypeParam(name: Name.Ident, tpe: Type.Var, classes: List[Symbol.ClassSym], loc: SourceLocation)
+  case class TypeParam(name: Name.Ident, sym: Symbol.KindedTypeVarSym, loc: SourceLocation)
+
+  case class ParYieldFragment(pat: TypedAst.Pattern, exp: TypedAst.Expression, loc: SourceLocation)
 
 }

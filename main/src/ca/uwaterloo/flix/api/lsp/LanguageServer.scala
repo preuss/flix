@@ -15,32 +15,33 @@
  */
 package ca.uwaterloo.flix.api.lsp
 
-import java.net.InetSocketAddress
-import java.nio.file.Path
-import java.text.SimpleDateFormat
-import java.util.Date
-
 import ca.uwaterloo.flix.api.lsp.provider._
-import ca.uwaterloo.flix.api.{Flix, Version}
+import ca.uwaterloo.flix.api.lsp.provider.completion.{DeltaContext, Differ}
+import ca.uwaterloo.flix.api.{CrashHandler, Flix, Version}
+import ca.uwaterloo.flix.language.CompilationMessage
+import ca.uwaterloo.flix.language.ast.SourceLocation
 import ca.uwaterloo.flix.language.ast.TypedAst.Root
-import ca.uwaterloo.flix.language.ast.{Ast, SourceLocation, Symbol}
-import ca.uwaterloo.flix.language.debug._
-import ca.uwaterloo.flix.tools.Tester.TestResult
-import ca.uwaterloo.flix.tools.{Packager, Tester}
+import ca.uwaterloo.flix.language.phase.extra.CodeHinter
+import ca.uwaterloo.flix.util.Formatter.NoFormatter
 import ca.uwaterloo.flix.util.Result.{Err, Ok}
-import ca.uwaterloo.flix.util.Validation.{Failure, Success}
-import ca.uwaterloo.flix.util.vt.TerminalContext
-import ca.uwaterloo.flix.util.{InternalCompilerException, InternalRuntimeException, Options, Result}
+import ca.uwaterloo.flix.util.Validation.{Failure, SoftFailure, Success}
+import ca.uwaterloo.flix.util._
 import org.java_websocket.WebSocket
 import org.java_websocket.handshake.ClientHandshake
 import org.java_websocket.server.WebSocketServer
-import org.json4s.JsonAST.{JArray, JString, JValue}
+import org.json4s.JsonAST.{JString, JValue}
 import org.json4s.JsonDSL._
 import org.json4s.ParserUtil.ParseException
 import org.json4s._
 import org.json4s.native.JsonMethods
 import org.json4s.native.JsonMethods.parse
 
+import java.io.ByteArrayInputStream
+import java.net.InetSocketAddress
+import java.nio.charset.Charset
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.zip.ZipInputStream
 import scala.collection.mutable
 
 /**
@@ -53,7 +54,7 @@ import scala.collection.mutable
   *
   * $ wscat -c ws://localhost:8000
   *
-  * > {"id": "1", "request": "api/addUri", "uri": "foo.flix", "src": "def main(_: Array[String]): Int32 & Impure = println(\"Hello World\"); 0"}
+  * > {"id": "1", "request": "api/addUri", "uri": "foo.flix", "src": "def main(): Unit \ IO = println(\"Hello World\")"}
   * > {"id": "2", "request": "lsp/check"}
   * > {"id": "3", "request": "lsp/hover", "uri": "foo.flix", "position": {"line": 1, "character": 25}}
   *
@@ -61,7 +62,7 @@ import scala.collection.mutable
   *
   * NB: All errors must be printed to std err.
   */
-class LanguageServer(port: Int) extends WebSocketServer(new InetSocketAddress("localhost", port)) {
+class LanguageServer(port: Int, o: Options) extends WebSocketServer(new InetSocketAddress("localhost", port)) {
 
   /**
     * The custom date format to use for logging.
@@ -69,19 +70,9 @@ class LanguageServer(port: Int) extends WebSocketServer(new InetSocketAddress("l
   val DateFormat: String = "yyyy-MM-dd HH:mm:ss"
 
   /**
-    * The audience used for formatting.
+    * The Flix instance (the same instance is used for incremental compilation).
     */
-  implicit val DefaultAudience: Audience = Audience.External
-
-  /**
-    * The terminal context used for formatting.
-    */
-  implicit val DefaultTerminalContext: TerminalContext = TerminalContext.NoTerminal
-
-  /**
-    * The default compiler options.
-    */
-  val DefaultOptions: Options = Options.Default
+  private val flix: Flix = new Flix().setFormatter(NoFormatter).setOptions(o)
 
   /**
     * A map from source URIs to source code.
@@ -91,18 +82,33 @@ class LanguageServer(port: Int) extends WebSocketServer(new InetSocketAddress("l
   /**
     * The current AST root. The root is null until the source code is compiled.
     */
-  var root: Root = _
+  private var root: Option[Root] = None
 
   /**
     * The current reverse index. The index is empty until the source code is compiled.
     */
-  var index: Index = Index.empty
+  private var index: Index = Index.empty
+
+  /**
+    * The current delta context. Initially has no changes.
+    */
+  private var delta: DeltaContext = DeltaContext(Nil)
+
+  /**
+    * A Boolean that records if the root AST is current (i.e. up-to-date).
+    */
+  private var current: Boolean = false
+
+  /**
+    * The current compilation errors.
+    */
+  private var currentErrors: List[CompilationMessage] = Nil
 
   /**
     * Invoked when the server is started.
     */
   override def onStart(): Unit = {
-    Console.println(s"LSP listening on: '$getAddress'.")
+    Console.println(s"Listen on '$getAddress'.")
   }
 
   /**
@@ -110,13 +116,14 @@ class LanguageServer(port: Int) extends WebSocketServer(new InetSocketAddress("l
     */
   override def onOpen(ws: WebSocket, ch: ClientHandshake): Unit = {
     /* nop */
+    Console.println(s"Client at '${ws.getRemoteSocketAddress}' connected.")
   }
 
   /**
     * Invoked when a client disconnects.
     */
   override def onClose(ws: WebSocket, i: Int, s: String, b: Boolean): Unit = {
-    /* nop */
+    Console.println(s"Client at '${ws.getRemoteSocketAddress}' disconnected.")
   }
 
   /**
@@ -135,7 +142,7 @@ class LanguageServer(port: Int) extends WebSocketServer(new InetSocketAddress("l
     case t: InternalCompilerException =>
       t.printStackTrace(System.err)
       System.exit(1)
-    case t: InternalRuntimeException =>
+    case t: RuntimeException =>
       t.printStackTrace(System.err)
       System.exit(2)
     case t: Throwable =>
@@ -160,28 +167,26 @@ class LanguageServer(port: Int) extends WebSocketServer(new InetSocketAddress("l
     json \\ "request" match {
       case JString("api/addUri") => Request.parseAddUri(json)
       case JString("api/remUri") => Request.parseRemUri(json)
+      case JString("api/addPkg") => Request.parseAddPkg(json)
+      case JString("api/remPkg") => Request.parseRemPkg(json)
+      case JString("api/addJar") => Request.parseAddJar(json)
+      case JString("api/remJar") => Request.parseRemJar(json)
       case JString("api/version") => Request.parseVersion(json)
       case JString("api/shutdown") => Request.parseShutdown(json)
 
-      case JString("cmd/runBenchmarks") => Request.parseRunBenchmarks(json)
-      case JString("cmd/runMain") => Request.parseRunMain(json)
-      case JString("cmd/runTests") => Request.parseRunTests(json)
-
       case JString("lsp/check") => Request.parseCheck(json)
       case JString("lsp/codelens") => Request.parseCodelens(json)
+      case JString("lsp/complete") => Request.parseComplete(json)
       case JString("lsp/highlight") => Request.parseHighlight(json)
       case JString("lsp/hover") => Request.parseHover(json)
       case JString("lsp/goto") => Request.parseGoto(json)
+      case JString("lsp/implementation") => Request.parseImplementation(json)
       case JString("lsp/rename") => Request.parseRename(json)
+      case JString("lsp/documentSymbols") => Request.parseDocumentSymbols(json)
+      case JString("lsp/workspaceSymbols") => Request.parseWorkspaceSymbols(json)
       case JString("lsp/uses") => Request.parseUses(json)
-
-      case JString("pkg/benchmark") => Request.parsePackageBenchmark(json)
-      case JString("pkg/build") => Request.parsePackageBuild(json)
-      case JString("pkg/buildDoc") => Request.parsePackageBuildDoc(json)
-      case JString("pkg/buildJar") => Request.parsePackageBuildJar(json)
-      case JString("pkg/buildPkg") => Request.parsePackageBuildPkg(json)
-      case JString("pkg/init") => Request.parsePackageInit(json)
-      case JString("pkg/test") => Request.parsePackageTest(json)
+      case JString("lsp/semanticTokens") => Request.parseSemanticTokens(json)
+      case JString("lsp/inlayHints") => Request.parseInlayHint(json)
 
       case s => Err(s"Unsupported request: '$s'.")
     }
@@ -190,65 +195,135 @@ class LanguageServer(port: Int) extends WebSocketServer(new InetSocketAddress("l
   }
 
   /**
+    * Add the given source code to the compiler
+    */
+  private def addSourceCode(uri: String, src: String) = {
+    current = false
+    flix.addSourceCode(uri, src)
+    sources += (uri -> src)
+  }
+
+  /**
+    * Remove the source code associated with the given uri from the compiler
+    */
+  private def remSourceCode(uri: String) = {
+    current = false
+    flix.remSourceCode(uri)
+    sources -= uri
+  }
+
+  /**
     * Process the request.
     */
   private def processRequest(request: Request)(implicit ws: WebSocket): JValue = request match {
+
     case Request.AddUri(id, uri, src) =>
-      sources += (uri -> src)
+      addSourceCode(uri, src)
       ("id" -> id) ~ ("status" -> "success")
 
     case Request.RemUri(id, uri) =>
-      sources -= uri
+      remSourceCode(uri)
+      ("id" -> id) ~ ("status" -> "success")
+
+    case Request.AddPkg(id, uri, data) =>
+      // TODO: Possibly move into Input class?
+      val inputStream = new ZipInputStream(new ByteArrayInputStream(data))
+      var entry = inputStream.getNextEntry
+      while (entry != null) {
+        val name = entry.getName
+        if (name.endsWith(".flix")) {
+          val bytes = StreamOps.readAllBytes(inputStream)
+          val src = new String(bytes, Charset.forName("UTF-8"))
+          addSourceCode(s"$uri/$name", src)
+        }
+        entry = inputStream.getNextEntry
+      }
+      inputStream.close()
+
+      ("id" -> id) ~ ("status" -> "success")
+
+    case Request.RemPkg(id, uri) =>
+      // clone is necessary because `remSourceCode` modifies `sources`
+      for ((file, _) <- sources.clone()
+           if file.startsWith(uri)) {
+        remSourceCode(file)
+      }
+      ("id" -> id) ~ ("status" -> "success")
+
+    case Request.AddJar(id, uri) =>
+      flix.addJar(uri)
+      ("id" -> id) ~ ("status" -> "success")
+
+    case Request.RemJar(id, uri) =>
+      // No-op (there is no easy way to remove a Jar from the JVM)
       ("id" -> id) ~ ("status" -> "success")
 
     case Request.Version(id) => processVersion(id)
 
     case Request.Shutdown(id) => processShutdown()
 
-    case Request.RunBenchmarks(id) => runBenchmarks(id)
-
-    case Request.RunMain(id) => runMain(id)
-
-    case Request.RunTests(id) => runTests(id)
-
     case Request.Check(id) => processCheck(id)
 
-    case Request.Codelens(id, uri) => processCodelens(id, uri)
+    case Request.Codelens(id, uri) =>
+      if (current)
+        ("id" -> id) ~ CodeLensProvider.processCodeLens(uri)(index, root)
+      else
+        ("id" -> id) ~ ("status" -> "success") ~ ("result" -> Nil)
+
+    case Request.Complete(id, uri, pos) =>
+      ("id" -> id) ~ CompletionProvider.autoComplete(uri, pos, sources.get(uri), currentErrors)(flix, index, root.orNull, delta)
 
     case Request.Highlight(id, uri, pos) =>
-      ("id" -> id) ~ HighlightProvider.processHighlight(uri, pos)(index, root)
+      ("id" -> id) ~ HighlightProvider.processHighlight(uri, pos)(index, root.orNull)
 
     case Request.Hover(id, uri, pos) =>
-      ("id" -> id) ~ HoverProvider.processHover(uri, pos)(index, root)
+      ("id" -> id) ~ HoverProvider.processHover(uri, pos, current)(index, root.orNull, flix)
 
     case Request.Goto(id, uri, pos) =>
-      ("id" -> id) ~ GotoProvider.processGoto(uri, pos)(index, root)
+      ("id" -> id) ~ GotoProvider.processGoto(uri, pos)(index, root.orNull)
+
+    case Request.Implementation(id, uri, pos) =>
+      ("id" -> id) ~ ("status" -> "success") ~ ("result" -> ImplementationProvider.processImplementation(uri, pos)(root.orNull).map(_.toJSON))
 
     case Request.Rename(id, newName, uri, pos) =>
-      ("id" -> id) ~ RenameProvider.processRename(newName, uri, pos)(index, root)
+      ("id" -> id) ~ RenameProvider.processRename(newName, uri, pos)(index, root.orNull)
+
+    case Request.DocumentSymbols(id, uri) =>
+      ("id" -> id) ~ ("status" -> "success") ~ ("result" -> SymbolProvider.processDocumentSymbols(uri)(root.orNull).map(_.toJSON))
+
+    case Request.WorkspaceSymbols(id, query) =>
+      ("id" -> id) ~ ("status" -> "success") ~ ("result" -> SymbolProvider.processWorkspaceSymbols(query)(root.orNull).map(_.toJSON))
 
     case Request.Uses(id, uri, pos) =>
-      ("id" -> id) ~ FindReferencesProvider.findRefs(uri, pos)(index, root)
+      ("id" -> id) ~ FindReferencesProvider.findRefs(uri, pos)(index, root.orNull)
 
-    case Request.PackageBenchmark(id, projectRoot) => benchmarkPackage(id, projectRoot)
-    case Request.PackageBuild(id, projectRoot) => buildPackage(id, projectRoot)
-    case Request.PackageBuildDoc(id, projectRoot) => buildDoc(id, projectRoot)
-    case Request.PackageBuildJar(id, projectRoot) => buildJar(id, projectRoot)
-    case Request.PackageBuildPkg(id, projectRoot) => buildPkg(id, projectRoot)
-    case Request.PackageInit(id, projectRoot) => initPackage(id, projectRoot)
-    case Request.PackageTest(id, projectRoot) => testPackage(id, projectRoot)
+    case Request.SemanticTokens(id, uri) =>
+      if (current)
+        ("id" -> id) ~ SemanticTokensProvider.provideSemanticTokens(uri)(index, root.orNull)
+      else
+        ("id" -> id) ~ ("status" -> "success") ~ ("result" -> ("data" -> Nil))
+
+    case Request.InlayHint(id, uri, range) =>
+      if (current)
+        ("id" -> id) ~ ("status" -> "success") ~ ("result" -> InlayHintProvider.processInlayHints(uri, range)(index, root.orNull, flix).map(_.toJSON))
+      else
+        ("id" -> id) ~ ("status" -> "success") ~ ("result" -> Nil)
+
+    case Request.ShowAst(id, phase) =>
+      if (current)
+        ("id" -> id) ~ ("status" -> "success") ~ ("result" -> ShowAstProvider.showAst(phase)(index, root, flix))
+      else
+        ("id" -> id) ~ ("status" -> "success") ~ ("result" -> Nil)
+
+    case Request.ListPhases(id) =>
+      ("id" -> id) ~ ("status" -> "success") ~ ("result" -> ListPhasesProvider.phases.map(JString))
 
   }
 
   /**
     * Processes a validate request.
     */
-  private def processCheck(requestId: String)(implicit ws: WebSocket): JValue = {
-    // Configure the Flix compiler.
-    val flix = new Flix()
-    for ((uri, source) <- sources) {
-      flix.addInput(uri, source)
-    }
+  private def processCheck(requestId: String): JValue = {
 
     // Measure elapsed time.
     val t = System.nanoTime()
@@ -257,213 +332,56 @@ class LanguageServer(port: Int) extends WebSocketServer(new InetSocketAddress("l
       flix.check() match {
         case Success(root) =>
           // Case 1: Compilation was successful. Build the reverse index.
-          this.root = root
-          this.index = Indexer.visitRoot(root)
+          processSuccessfulCheck(requestId, root, LazyList.empty, flix.options.explain, t)
 
-          // Compute elapsed time.
-          val e = System.nanoTime() - t
-
-          // Send back a status message.
-          ("id" -> requestId) ~ ("status" -> "success") ~ ("time" -> e)
+        case SoftFailure(root, errors) =>
+          // Case 2: Compilation had non-critical errors. Build the reverse index.
+          processSuccessfulCheck(requestId, root, errors, flix.options.explain, t)
 
         case Failure(errors) =>
-          // Case 2: Compilation failed. Send back the error messages.
-          val results = PublishDiagnosticsParams.from(errors)
+          // Case 3: Compilation failed. Send back the error messages.
+
+          // Mark the AST as outdated and update the current errors.
+          this.current = false
+          this.currentErrors = errors.toList
+
+          // Publish diagnostics.
+          val results = PublishDiagnosticsParams.fromMessages(errors, flix.options.explain)
           ("id" -> requestId) ~ ("status" -> "failure") ~ ("result" -> results.map(_.toJSON))
       }
     } catch {
-      case t: Throwable =>
-        t.printStackTrace(System.err)
-        ("id" -> requestId) ~ ("status" -> "failure")
+      case ex: Throwable =>
+        // Mark the AST as outdated.
+        this.current = false
+        CrashHandler.handleCrash(ex)(flix)
+        ("id" -> requestId) ~ ("status" -> "failure") ~ ("result" -> Nil)
     }
   }
 
   /**
-    * Processes a codelens request.
+    * Helper function for [[processCheck]] which handles successful and soft failure compilations.
     */
-  private def processCodelens(requestId: String, uri: String)(implicit ws: WebSocket): JValue = {
-    /**
-      * Returns a code lens for main (if present).
-      */
-    def mkCodeLensForMain(): List[CodeLens] = {
-      if (root == null) {
-        return Nil
-      }
+  private def processSuccessfulCheck(requestId: String, root: Root, errors: LazyList[CompilationMessage], explain: Boolean, t0: Long): JValue = {
+    val oldRoot = this.root
+    this.root = Some(root)
+    this.index = Indexer.visitRoot(root)
+    this.delta = Differ.difference(oldRoot, root)
+    this.current = true
+    this.currentErrors = errors.toList
 
-      val main = Symbol.Main
-      root.defs.get(main) match {
-        case Some(defn) if matchesUri(uri, defn.loc) =>
-          val loc = defn.sym.loc
-          val cmd = Command("Run Main", "flix.cmdRunMain", Nil)
-          CodeLens(Range.from(loc), Some(cmd)) :: Nil
-        case _ => Nil
-      }
-    }
+    // Compute elapsed time.
+    val e = System.nanoTime() - t0
 
-    /**
-      * Returns a list of code lenses for the unit tests in the program.
-      */
-    def mkCodeLensesForUnitTests(): List[CodeLens] = {
-      // Case 1: No root. Return immediately.
-      if (root == null) {
-        return Nil
-      }
+    // Print query time.
+    // println(s"lsp/check: ${e / 1_000_000}ms")
 
-      val result = mutable.ListBuffer.empty[CodeLens]
-      for ((sym, defn) <- root.defs) {
-        if (matchesUri(uri, defn.loc) && defn.ann.exists(_.name.isInstanceOf[Ast.Annotation.Test])) {
-          val loc = defn.sym.loc
-          val cmd = Command("Run All Tests", "flix.cmdRunAllTests", Nil)
-          result.addOne(CodeLens(Range.from(loc), Some(cmd)))
-        }
-      }
-      result.toList
-    }
+    // Compute Code Quality hints.
+    val codeHints = CodeHinter.run(root, sources.keySet.toSet)(flix, index)
 
-    //
-    // Compute all code lenses.
-    //
-    val allCodeLenses = mkCodeLensForMain()
-    ("id" -> requestId) ~ ("status" -> "success") ~ ("result" -> JArray(allCodeLenses.map(_.toJSON)))
-  }
-
-
-  /**
-    * Processes a request to run all benchmarks. Re-compiles and runs the program.
-    */
-  private def runBenchmarks(requestId: String): JValue = {
-    // TODO: runBenchmarks
-    ("id" -> requestId) ~ ("status" -> "success") ~ ("result" -> "TBD: TEXT WILL GO HERE")
-  }
-
-  /**
-    * Processes a request to run main. Re-compiles and runs the program.
-    */
-  private def runMain(requestId: String): JValue = {
-    // Configure the Flix compiler.
-    val flix = new Flix()
-    for ((uri, source) <- sources) {
-      flix.addInput(uri, source)
-    }
-
-    flix.compile() match {
-      case Success(t) => t.getMain match {
-        case None =>
-          ("id" -> requestId) ~ ("status" -> "success") ~ ("result" -> "Compilation successful. No main to run.")
-        case Some(main) =>
-          try {
-            val result = main(Array.empty)
-            ("id" -> requestId) ~ ("status" -> "success") ~ ("result" -> result.toString)
-          } catch {
-            case ex: Throwable =>
-              ex.printStackTrace(System.err)
-              ("id" -> requestId) ~ ("status" -> "failure") ~ ("result" -> ex.getMessage)
-          }
-      }
-      case Failure(errors) =>
-        // Case 2: Compilation failed. Send back the error messages.
-        val results = PublishDiagnosticsParams.from(errors)
-        ("id" -> requestId) ~ ("status" -> "failure") ~ ("result" -> results.map(_.toJSON))
-    }
-  }
-
-  /**
-    * Processes a request to run all tests. Re-compiles and runs all unit tests.
-    */
-  private def runTests(requestId: String): JValue = {
-    // Configure the Flix compiler.
-    val flix = new Flix()
-    for ((uri, source) <- sources) {
-      flix.addInput(uri, source)
-    }
-
-    flix.compile() match {
-      case Success(t) =>
-        try {
-          val testResults = Tester.test(t).results.sortBy(tr => tr.sym.loc)
-          val results: List[JValue] = testResults.map {
-            case TestResult.Success(sym, _) =>
-              ("name" -> sym.toString) ~ ("location" -> Location.from(sym.loc).toJSON) ~ ("outcome" -> "success")
-            case TestResult.Failure(sym, m) =>
-              ("name" -> sym.toString) ~ ("location" -> Location.from(sym.loc).toJSON) ~ ("outcome" -> "failure") ~ ("message" -> m)
-          }
-          ("id" -> requestId) ~ ("status" -> "success") ~ ("result" -> JArray(results))
-        } catch {
-          case ex: Throwable =>
-            ex.printStackTrace(System.err)
-            ("id" -> requestId) ~ ("status" -> "failure") ~ ("result" -> ex.getMessage)
-        }
-      case Failure(errors) =>
-        // Case 2: Compilation failed. Send back the error messages.
-        val results = PublishDiagnosticsParams.from(errors)
-        ("id" -> requestId) ~ ("status" -> "failure") ~ ("result" -> results.map(_.toJSON))
-    }
-  }
-
-  /**
-    * Processes a request to run all benchmarks in the project.
-    */
-  private def benchmarkPackage(requestId: String, projectRoot: Path): JValue = {
-    // TODO: benchmarkPackage
-    Packager.benchmark(projectRoot, DefaultOptions)
-    ("id" -> requestId) ~ ("status" -> "success") ~ ("result" -> "TBD: TEXT WILL GO HERE")
-  }
-
-  /**
-    * Processes a request to build the project.
-    */
-  private def buildPackage(requestId: String, projectRoot: Path): JValue = {
-    // TODO: buildPackage
-    Packager.build(projectRoot, DefaultOptions) match {
-      case None =>
-        ("id" -> requestId) ~ ("status" -> "failure") ~ ("result" -> "TEXT WILL GO HERE")
-      case Some(_) =>
-        ("id" -> requestId) ~ ("status" -> "success") ~ ("result" -> "Package built.")
-    }
-  }
-
-  /**
-    * Processes a request to build the documentation.
-    */
-  private def buildDoc(requestId: String, projectRoot: Path): JValue = {
-    // TODO: buildDoc
-    ("id" -> requestId) ~ ("status" -> "success") ~ ("result" -> "TBD: TEXT WILL GO HERE")
-  }
-
-  /**
-    * Processes a request to build a jar from the project.
-    */
-  private def buildJar(requestId: String, projectRoot: Path): JValue = {
-    // TODO: buildJar
-    Packager.buildJar(projectRoot, DefaultOptions)
-    ("id" -> requestId) ~ ("status" -> "success") ~ ("result" -> "TBD: TEXT WILL GO HERE")
-  }
-
-  /**
-    * Processes a request to build a flix package from the project.
-    */
-  private def buildPkg(requestId: String, projectRoot: Path): JValue = {
-    // TODO: buildPkg
-    Packager.buildPkg(projectRoot, DefaultOptions)
-    ("id" -> requestId) ~ ("status" -> "success") ~ ("result" -> "TBD: TEXT WILL GO HERE")
-  }
-
-  /**
-    * Processes a request to init a new flix package.
-    */
-  private def initPackage(requestId: String, projectRoot: Path): JValue = {
-    // TODO: initPackage
-    Packager.init(projectRoot, DefaultOptions)
-    ("id" -> requestId) ~ ("status" -> "success") ~ ("result" -> "TBD: TEXT WILL GO HERE")
-  }
-
-  /**
-    * Processes a request to run all tests in the package.
-    */
-  private def testPackage(requestId: String, projectRoot: Path): JValue = {
-    // TODO: initPackage
-    Packager.test(projectRoot, DefaultOptions)
-    ("id" -> requestId) ~ ("status" -> "success") ~ ("result" -> "TBD: TEXT WILL GO HERE")
+    // Determine the status based on whether there are errors.
+    val status = if (errors.isEmpty) "success" else "failure"
+    val results = PublishDiagnosticsParams.fromMessages(errors, explain) ::: PublishDiagnosticsParams.fromCodeHints(codeHints)
+    ("id" -> requestId) ~ ("status" -> status) ~ ("time" -> e) ~ ("result" -> results.map(_.toJSON))
   }
 
   /**

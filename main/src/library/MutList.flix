@@ -17,79 +17,95 @@
 ///
 /// Represents a mutable list.
 ///
-pub enum MutList[a] {
-    case MutList(Ref[Array[a]], Ref[Int32])
+/// Invariant
+///   - The length is always higher than the total capacity of the array.
+///   - The capacity of the array is always 8 or more.
+///
+pub enum MutList[a: Type, r: Region] {
+    case MutList(Region[r], Ref[Array[a, r], r], Ref[Int32, r])
 }
 
-instance ToString[MutList[a]] with [a : ToString] {
-    def toString(v: MutList[a]): String = {
-        let s = MutList.formatWith(x -> "${x}", ", ", v) as & Pure;
-        "MutList#{${s}}"
-    }
-}
-
-instance Functor[MutList] {
-    def map(f: a -> b & e, v: MutList[a]): MutList[b] & e = MutList.map(f, v) as & e
-}
-
-instance Copy[MutList[a]] {
-    def copy(v: MutList[a]): MutList[a] & e =
-        let MutList(a, l) = v;
-        MutList(ref Copy.copy(deref a), ref (deref l)) as & e
-}
-
-instance Foldable[MutList] {
-    def foldLeft(f: (b, a) -> b & e, s: b, v: MutList[a]): b & e = MutList.foldLeft(f, s, v) as & e
-    def foldRight(f: (a, b) -> b & e, s: b, v: MutList[a]): b & e = MutList.foldRight(f, s, v) as & e
+instance Newable[MutList[a]] {
+    pub def new(r: Region[r]): MutList[a, r] \ Write(r) = MutList.new(r)
 }
 
 namespace MutList {
 
     ///
+    /// Constant which stores the minimum capacity of a MutList.
+    ///
+    @Internal
+    pub def minCapacity(): Int32 = 8
+
+    ///
+    /// Returns a string representation of the given MutList `l`.
+    ///
+    pub def toString(l: MutList[a, r]): String \ Read(r) with ToString[a] = region r2 {
+        let sb = new StringBuilder(r2);
+        StringBuilder.appendString!("MutList#{", sb);
+        forEachWithIndex((i, x) -> {
+            if (i < 1)
+                StringBuilder.appendString!("${x}", sb)
+            else
+                StringBuilder.appendString!(", ${x}", sb)
+            }, l);
+        StringBuilder.appendString!("}", sb);
+        StringBuilder.toString(sb)
+    }
+
+    ///
     /// Returns a new empty mutable list with a default capacity.
     ///
-    pub def new(): MutList[a] & Impure = MutList(ref [], ref 0)
+    pub def new(r: Region[r]): MutList[a, r] \ Write(r) =
+        MutList(r, ref Array.new(r, minCapacity()) @ r, ref 0 @ r)
 
     ///
     /// Returns a mutable list of all integers between `b` (inclusive) and `e` (exclusive).
     ///
     /// Returns an empty mutable list if `b >= e`.
     ///
-    pub def range(b: Int32, e: Int32): MutList[Int32] & Impure = MutList(ref Array.range(b, e), ref (e - b))
+    pub def range(r: Region[r], b: Int32, e: Int32): MutList[Int32, r] \ Write(r) =
+        let minCap = minCapacity();
+        let d = e - b;
+        let c = Order.max(d, minCap);
+        let f = i -> { let x = b + i; if (x < e) x else Reflect.default() };
+        MutList(r, ref Array.init(r, f, c) @ r, ref d @ r)
 
     ///
-    /// Returns the element at position `i` in the mutable list `v`.
+    /// Optionally returns the element at position `i` in the mutable list `v`.
     ///
-    pub def get(i: Int32, v: MutList[a]): a & Impure =
-        let MutList(a, _) = v;
-        if (i > length(v))
-            (deref a)[-1] /// deliberately trigger index-out-of-bounds
+    pub def nth(i: Int32, v: MutList[a, r]): Option[a] \ Read(r) =
+        let MutList(_, a, l) = v;
+        if (0 <= i and i < deref l)
+            Array.nth(i, deref a)
         else
-            Array.get(deref a, i)
+            None
 
     ///
     /// Returns the number of elements in the given mutable list `v`.
     ///
-    pub def length(v: MutList[a]): Int32 & Impure =
-        let MutList(_, l) = v;
+    pub def length(v: MutList[a, r]): Int32 \ Read(r) =
+        let MutList(_, _, l) = v;
         deref l
 
     ///
     /// Returns `true` if the given mutable list `v` is empty.
     ///
-    pub def isEmpty(v: MutList[a]): Bool & Impure = length(v) == 0
+    pub def isEmpty(v: MutList[a, r]): Bool \ Read(r) =
+        length(v) == 0
 
     ///
     /// Returns `true` if the given element `x` is a member of the given mutable list `v`.
     ///
-    pub def memberOf[a : Eq](x: a, v: MutList[a]): Bool & Impure = exists(y -> y == x, v)
+    pub def memberOf(x: a, v: MutList[a, r]): Bool \ Read(r) with Eq[a] =
+        exists(y -> y == x, v)
 
     ///
     /// Optionally finds the smallest element of `v` according to the `Order` on `a`.
     ///
     /// Returns `None` if `v` is empty.
     ///
-    pub def minimum[a : Order](v: MutList[a]): Option[a] & Impure =
+    pub def minimum(v: MutList[a, r]): Option[a] \ Read(r) with Order[a] =
         reduceLeft(Order.min, v)
 
     ///
@@ -97,7 +113,7 @@ namespace MutList {
     ///
     /// Returns `None` if `v` is empty.
     ///
-    pub def minimumBy(cmp: (a, a) -> Comparison, v: MutList[a]): Option[a] & Impure =
+    pub def minimumBy(cmp: (a, a) -> Comparison, v: MutList[a, r]): Option[a] \ Read(r) =
         reduceLeft(Order.minBy(cmp), v)
 
     ///
@@ -105,7 +121,7 @@ namespace MutList {
     ///
     /// Returns `None` if `v` is empty.
     ///
-    pub def maximum[a : Order](v: MutList[a]): Option[a] & Impure =
+    pub def maximum(v: MutList[a, r]): Option[a] \ Read(r) with Order[a] =
         reduceLeft(Order.max, v)
 
     ///
@@ -113,7 +129,7 @@ namespace MutList {
     ///
     /// Returns `None` if `v` is empty.
     ///
-    pub def maximumBy(cmp: (a, a) -> Comparison, v: MutList[a]): Option[a] & Impure =
+    pub def maximumBy(cmp: (a, a) -> Comparison, v: MutList[a, r]): Option[a] \ Read(r) =
         reduceLeft(Order.maxBy(cmp), v)
 
     ///
@@ -121,53 +137,81 @@ namespace MutList {
     ///
     /// Returns `0` if the given mutable list `v` is empty.
     ///
-    pub def count(f: a -> Bool, v: MutList[a]): Int32 & Impure =
+    pub def count(f: a -> Bool \ ef, v: MutList[a, r]): Int32 \ { ef, Read(r) } =
         foldLeft((acc, x) -> if (f(x)) acc + 1 else acc, 0, v)
+
+    ///
+    /// Returns the sum of all elements in the MutList `v`.
+    ///
+    pub def sum(v: MutList[Int32, r]): Int32 \ Read(r) =
+        foldLeft((acc, x) -> acc + x, 0, v)
+
+    ///
+    /// Returns the sum of all elements in the MutList `v` according to the function `f`.
+    ///
+    pub def sumWith(f: a -> Int32 \ ef, v: MutList[a, r]): Int32 \ { ef, Read(r) } =
+        foldLeft((acc, x) -> acc + f(x), 0, v)
+
+    ///
+    /// Returns the product of all elements in the mutable list `v`.
+    ///
+    pub def product(v: MutList[Int32, r]): Int32 \ Read(r) =
+        if (isEmpty(v))
+            1
+        else
+            foldLeft((acc, x) -> acc * x, 1, v)
+
+    ///
+    /// Returns the product of all elements in the mutable list `v` according to the function `f`.
+    ///
+    pub def productWith(f: a -> Int32 \ ef, v: MutList[a, r]): Int32 \ { ef, Read(r) } =
+        if (isEmpty(v))
+            1
+        else
+            foldLeft((acc, x) -> acc * f(x), 1, v)
 
     ///
     /// Returns `true` if the given predicate `f` holds for at least one element of the given mutable list `v`.
     ///
     /// Returns `false` if the given mutable list `v` is empty.
     ///
-    pub def exists(f: a -> Bool, v: MutList[a]): Bool & Impure =
-        let MutList(a, l) = v;
-        existsHelper(f, deref a, deref l, 0)
-
-    ///
-    /// Helper function for `exists`.
-    ///
-    def existsHelper(f: a -> Bool, a: Array[a], len: Int32, i: Int32): Bool & Impure =
-        if (i >= len)
-            false
-        else
-            f(a[i]) or existsHelper(f, a, len, i + 1)
+    pub def exists(f: a -> Bool \ ef, v: MutList[a, r]): Bool \ { ef, Read(r) } =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        def loop(i) = {
+            if (i >= l)
+                false
+            else
+                if (f(Array.get(i, a))) true else loop(i + 1)
+        };
+        loop(0)
 
     ///
     /// Returns `true` if the given predicate `f` holds for all elements of the given mutable list `v`.
     ///
     /// Returns `true` if the given mutable list `v` is empty.
     ///
-    pub def forall(f: a -> Bool, v: MutList[a]): Bool & Impure =
-        let MutList(a, l) = v;
-        forallHelper(f, deref a, deref l, 0)
-
-    ///
-    /// Helper function for `forall`.
-    ///
-    def forallHelper(f: a -> Bool, a: Array[a], len: Int32, i: Int32): Bool & Impure =
-        if (i >= len)
-            true
-        else
-            f(a[i]) and existsHelper(f, a, len, i + 1)
+    pub def forAll(f: a -> Bool \ ef, v: MutList[a, r]): Bool \ { ef, Read(r) } =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        def loop(i) = {
+            if (i >= l)
+                true
+            else
+                if (f(Array.get(i, a))) loop(i + 1) else false
+        };
+        loop(0)
 
     ///
     /// Optionally returns the first element of the given mutable list `v`.
     ///
     /// Returns `None` if the given mutable list `v` is empty.
     ///
-    pub def head(v: MutList[a]): Option[a] & Impure =
-        let MutList(a, l) = v;
-        if ((deref l) == 0)
+    pub def head(v: MutList[a, r]): Option[a] \ Read(r) =
+        let MutList(_, a, _) = v;
+        if (isEmpty(v))
             None
         else
             Array.head(deref a)
@@ -177,54 +221,54 @@ namespace MutList {
     ///
     /// Returns `None` if the given mutable list `v` is empty.
     ///
-    pub def last(v: MutList[a]): Option[a] & Impure =
-        let MutList(a, l) = v;
+    pub def last(v: MutList[a, r]): Option[a] \ Read(r) =
+        let MutList(_, a, l) = v;
         let len = deref l;
-        if (len > 0) Some((deref a)[len - 1]) else None
+        if (len > 0) Some(Array.get(len - 1, deref a)) else None
 
     ///
     /// Alias for `IndexOfLeft`
     ///
-    pub def indexOf[a : Eq](x: a, v: MutList[a]): Option[Int32] & Impure = indexOfLeft(x, v)
+    pub def indexOf(x: a, v: MutList[a, r]): Option[Int32] \ Read(r) with Eq[a] =
+        indexOfLeft(x, v)
 
     ///
     /// Optionally returns the position of the first occurrence of `x` in `v`
     /// searching from left to right.
     ///
-    pub def indexOfLeft[a : Eq](x: a, v: MutList[a]): Option[Int32] & Impure =
-        let MutList(a, l) = v;
-        indexOfLeftHelper(x, deref a, deref l, 0)
-
-    ///
-    /// Helper function for `indexOfLeft`.
-    ///
-    def indexOfLeftHelper[a : Eq](x: a, a: Array[a], len: Int32, i: Int32): Option[Int32] & Impure =
-        if (i >= len)
-            None
-        else
-            if (x == a[i]) Some(i) else indexOfLeftHelper(x, a, len, i + 1)
+    pub def indexOfLeft(x: a, v: MutList[a, r]): Option[Int32] \ Read(r) with Eq[a] =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        def loop(i) = {
+            if (i >= l)
+                None
+            else
+                if (x == Array.get(i, a)) Some(i) else loop(i + 1)
+        };
+        loop(0)
 
     ///
     /// Optionally returns the position of the first occurrence of `x` in `v`
     /// searching from right to left.
     ///
-    pub def indexOfRight[a : Eq](x: a, v: MutList[a]): Option[Int32] & Impure =
-        let MutList(a, l) = v;
-        indexOfRightHelper(x, deref a, (deref l) - 1)
-
-    ///
-    /// Helper function for `indexOfRight`.
-    ///
-    def indexOfRightHelper[a : Eq](x: a, a: Array[a], i: Int32): Option[Int32] & Impure =
-        if (i < 0)
-            None
-        else
-            if (x == a[i]) Some(i) else indexOfRightHelper(x, a, i - 1)
+    pub def indexOfRight(x: a, v: MutList[a, r]): Option[Int32] \ Read(r) with Eq[a] =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        def loop(i) = {
+            if (i < 0)
+                None
+            else
+                if (x == Array.get(i, a)) Some(i) else loop(i - 1)
+        };
+        loop(l - 1)
 
     ///
     /// Alias for `findLeft`.
     ///
-    pub def find(f: a -> Bool, v: MutList[a]): Option[a] & Impure = findLeft(f, v)
+    pub def find(f: a -> Bool, v: MutList[a, r]): Option[a] \ Read(r) =
+        findLeft(f, v)
 
     ///
     /// Optionally returns the left-most element in the given mutable list `v` that satisfies the given predicate `f`.
@@ -232,18 +276,18 @@ namespace MutList {
     /// Returns `None` if no element satisfies the given predicate `f`.
     /// Returns `None` if the given mutable list `v` is empty.
     ///
-    pub def findLeft(f: a -> Bool, v: MutList[a]): Option[a] & Impure =
-        let MutList(a, l) = v;
-        findLeftHelper(f, deref a, deref l, 0)
+    pub def findLeft(f: a -> Bool, v: MutList[a, r]): Option[a] \ Read(r) =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        def loop(i) = {
+            if (i >= l)
+                None
+            else
+                if (f(Array.get(i, a))) Some(Array.get(i, a)) else loop(i + 1)
 
-    ///
-    /// Helper function for `findLeft`.
-    ///
-    def findLeftHelper(f: a -> Bool, a: Array[a], len: Int32, i: Int32): Option[a] & Impure =
-        if (i >= len)
-            None
-        else
-            if (f(a[i])) Some(a[i]) else findLeftHelper(f, a, len, i + 1)
+        };
+        loop(0)
 
     ///
     /// Optionally returns the right-most element in the given mutable list `v` that satisfies the given predicate `f`.
@@ -251,211 +295,267 @@ namespace MutList {
     /// Returns `None` if no element satisfies the given predicate `f`.
     /// Returns `None` if the given mutable list `v` is empty.
     ///
-    pub def findRight(f: a -> Bool, v: MutList[a]): Option[a] & Impure =
-        let MutList(a, l) = v;
-        findRightHelper(f, deref a, (deref l) - 1)
-
-    ///
-    /// Helper function for `findRight`.
-    ///
-    def findRightHelper(f: a -> Bool, a: Array[a], i: Int32): Option[a] & Impure =
-        if (i < 0)
-            None
-        else
-            if (f(a[i])) Some(a[i]) else findRightHelper(f, a, i - 1)
+    pub def findRight(f: a -> Bool, v: MutList[a, r]): Option[a] \ Read(r) =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        def loop(i) = {
+            if (i < 0)
+                None
+            else
+                if (f(Array.get(i, a))) Some(Array.get(i, a)) else loop(i - 1)
+        };
+        loop(l - 1)
 
     ///
     /// Alias for `scanLeft`.
     ///
-    pub def scan(f: (b, a) ->b & e, s: b, v: MutList[a]): MutList[b] & Impure = scanLeft(f, s, v)
+    pub def scan(r1: Region[r1], f: (b, a) -> b \ ef, s: b, v: MutList[a, r2]): MutList[b, r1] \ { ef, Read(r2), Write(r1) } =
+        scanLeft(r1, f, s, v)
 
     ///
     /// Accumulates the result of applying `f` to `v` going left to right.
     ///
-    pub def scanLeft(f: (b, a) -> b & e, s: b, v: MutList[a]): MutList[b] & Impure =
-        let MutList(a, l) = v;
-        let len = deref l;
-        let b = [s; len + 1];
-        scanLeftHelper(f, s, deref a, b, 1, len + 1);
-        MutList(ref b, ref (len + 1))
-
-    ///
-    /// Helper function for `scanLeft`.
-    ///
-    def scanLeftHelper(f: (b, a) -> b & e, s: b, a: Array[a], b: Array[b], i: Int32, n: Int32): Unit & Impure =
-        if (i >= n)
-            ()
-        else {
-            let s1 = f(s, a[i - 1]);
-            b[i] = s1;
-            scanLeftHelper(f, s1, a, b, i + 1, n)
-        }
+    pub def scanLeft(r1: Region[r1], f: (b, a) -> b \ ef, s: b, v: MutList[a, r2]): MutList[b, r1] \ { ef, Read(r2), Write(r1) } =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        let n = l + 1;
+        let b = Array.repeat(r1, n, s);
+        def loop(i, acc) = {
+            if (i >= n)
+                ()
+            else {
+                let s1 = f(acc, Array.get(i - 1, a));
+                b[i] = s1;
+                loop(i + 1, s1)
+            }
+        };
+        loop(1, s);
+        MutList(r1, ref b @ r1, ref n @ r1)
 
     ///
     /// Accumulates the result of applying `f` to `v` going right to left.
     ///
-    pub def scanRight(f: (a, b) -> b & e, s: b, v: MutList[a]): MutList[b] & Impure =
-        let MutList(a, l) = v;
-        let len = deref l;
-        let b = [s; len + 1];
-        scanRightHelper(f, s, deref a, b, len - 1);
-        MutList(ref b, ref (len + 1))
-
-    ///
-    /// Helper function for `scanRight`.
-    ///
-    def scanRightHelper(f: (a, b) -> b & e, s: b, a: Array[a], b: Array[b], i: Int32): Unit & Impure =
-        if (i < 0)
-            ()
-        else {
-            let s1 = f(a[i], s);
-            b[i] = s1;
-            scanRightHelper(f, s1, a, b, i - 1)
-        }
+    pub def scanRight(r1: Region[r1], f: (a, b) -> b \ ef, s: b, v: MutList[a, r2]): MutList[b, r1] \ { ef, Read(r2), Write(r1) } =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        let n = l + 1;
+        let b = Array.repeat(r1, n, s);
+        def loop(i, acc) = {
+            if (i < 0)
+                ()
+            else {
+                let s1 = f(Array.get(i, a), acc);
+                b[i] = s1;
+                loop(i - 1, s1)
+            }
+        };
+        loop(l - 1, s);
+        MutList(r1, ref b @ r1, ref n @ r1)
 
     ///
     /// Apply `f` to every element in `v`.
     ///
     /// The result is a new mutable list.
     ///
-    pub def map(f: a -> b & e, v: MutList[a]): MutList[b] & Impure =
-        let MutList(a, l) = v;
-        let len = deref l;
-        MutList(ref Array.init(i -> f((deref a)[i]), len), ref len)
-
-    ///
-    /// Apply `f` to every element in `v`.
-    ///
-    pub def transform!(f: a -> a, v: mut MutList[a]): Unit & Impure =
-        let MutList(a, l) = v;
-        transformHelper!(f, deref a, 0, deref l)
-
-    ///
-    /// Helper function for `transform!`
-    ///
-    def transformHelper!(f: a -> a, a: Array[a], i: Int32, n: Int32): Unit & Impure =
-        if (i >= n)
-            ()
+    pub def map(r1: Region[r1], f: a -> b \ ef, v: MutList[a, r]): MutList[b, r1] \ { ef, Read(r), Write(r1) } =
+        if (isEmpty(v))
+            new MutList(r1)
         else {
-            a[i] = f(a[i]);
-            transformHelper!(f, a, i + 1, n)
+            let MutList(_, ra, rl) = v;
+            let a = deref ra;
+            let l = deref rl;
+            let x = f(Array.get(0, a));
+            let b = Array.repeat(r1, Array.length(a), x);
+            def loop(i) = {
+                if (i >= l)
+                    ()
+                else {
+                    b[i] = f(Array.get(i, a));
+                    loop(i + 1)
+                }
+            };
+            loop(1);
+            MutList(r1, ref b @ r1, ref l @ r1)
         }
 
     ///
     /// Returns the result of applying `f` to every element in `v` along with that element's index.
     ///
-    pub def mapWithIndex(f: (a, Int32) -> b & e, v: MutList[a]): MutList[b] & Impure =
-        let MutList(a, l) = v;
-        let len = deref l;
-        MutList(ref Array.init(i -> f((deref a)[i], i), len), ref len)
+    pub def mapWithIndex(r1: Region[r1], f: (Int32, a) -> b \ ef, v: MutList[a, r]): MutList[b, r1] \ { ef, Read(r), Write(r1) } =
+        if (isEmpty(v))
+            new MutList(r1)
+        else {
+            let MutList(_, ra, rl) = v;
+            let a = deref ra;
+            let l = deref rl;
+            let x = f(0, Array.get(0, a));
+            let b = Array.repeat(r1, Array.length(a), x);
+            def loop(i) = {
+                if (i >= l)
+                    ()
+                else {
+                    b[i] = f(i, Array.get(i, a));
+                    loop(i + 1)
+                }
+            };
+            loop(1);
+            MutList(r1, ref b @ r1, ref l @ r1)
+        }
+
+    ///
+    /// Apply `f` to every element in `v`.
+    ///
+    pub def transform!(f: a -> a, v: MutList[a, r]): Unit \ { Read(r), Write(r) } =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        def loop(i) = {
+            if (i >= l)
+                ()
+            else {
+                a[i] = f(Array.get(i, a));
+                loop(i + 1)
+            }
+        };
+        loop(0)
 
     ///
     /// Apply `f` to every element in `v` along with that element's index.
     ///
-    pub def transformWithIndex!(f: (a, Int32) -> a, v: mut MutList[a]): Unit & Impure =
-        let MutList(a, l) = v;
-        transformWithIndexHelper!(f, deref a, 0, deref l)
-
-    ///
-    /// Helper function for `transformWithIndex!`
-    ///
-    def transformWithIndexHelper!(f: (a, Int32) -> a, a: Array[a], i: Int32, n: Int32): Unit & Impure =
-        if (i >= n)
-            ()
-        else {
-            a[i] = f(a[i], i);
-            transformWithIndexHelper!(f, a, i + 1, n)
-        }
-
-    ///
-    /// Returns the result of applying `combine` to all the elements in `v`, using `empty` as the initial value.
-    ///
-    pub def fold[a : Monoid](v: MutList[a]): a = Foldable.fold(v)
+    pub def transformWithIndex!(f: (Int32, a) -> a, v: MutList[a, r]): Unit \ Read(r) =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        def loop(i) = {
+            if (i >= l)
+                ()
+            else {
+                a[i] = f(i, Array.get(i, a));
+                loop(i + 1)
+            }
+        };
+        loop(0)
 
     ///
     /// Applies `f` to a start value `s` and all elements in `a` going from left to right.
     ///
     /// That is, the result is of the form: `f(...f(f(s, a[0]), a[1])..., xn)`.
     ///
-    pub def foldLeft(f: (b, a) -> b & e, s: b, v: MutList[a]): b & Impure =
-        let len = length(v);
-        foldLeftHelper(f, s, v, len, 0)
-
-    ///
-    /// Helper function for `foldLeft`.
-    ///
-    def foldLeftHelper(f: (b, a) -> b & e, s: b, v: MutList[a], len: Int32, i: Int32): b & Impure =
-        if (i < len)
-            let s1 = f(s, get(i, v)) as & Impure;
-            foldLeftHelper(f, s1, v, len, i + 1)
-        else
-            s
+    pub def foldLeft(f: (b, a) -> b \ ef, s: b, v: MutList[a, r]): b \ { ef, Read(r) } =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        def loop(i, acc) = {
+            if (i >= l)
+                acc
+            else {
+                let s1 = f(acc, Array.get(i, a));
+                loop(i + 1, s1)
+            }
+        };
+        loop(0, s)
 
     ///
     /// Applies `f` to a start value `s` and all elements in `a` going from left to right.
     ///
     /// That is, the result is of the form: `f(...f(f(s, a[0]), a[1])..., xn)`.
     ///
-    pub def foldRight(f: (a, b) -> b & e, s: b, v: MutList[a]): b & Impure =
-        let len = length(v);
-        foldRightHelper(f, s, v, len - 1)
+    /// The implementation is tail recursive.
+    ///
+    pub def foldRight(f: (a, b) -> b \ ef, s: b, v: MutList[a, r]): b \ { ef, Read(r) } =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        def loop(i, acc) = {
+            if (i < 0)
+                acc
+            else {
+                let s1 = f(Array.get(i, a), acc);
+                loop(i - 1, s1)
+            }
+        };
+        loop(l - 1, s)
 
     ///
-    /// Helper function for `foldRight`.
+    /// Applies `f` to a start value `z` and all elements in `a` going from left to right.
     ///
-    def foldRightHelper(f: (a, b) -> b & e, s: b, v: MutList[a], i: Int32): b & Impure =
-        if (i < 0)
-            s
-        else
-            let s1 = f(get(i, v), s) as & Impure;
-            foldRightHelper(f, s1, v, i - 1)
+    /// That is, the result is of the form: `f(x1, ...f(xn-1, f(xn, z))...)`.
+    /// A `foldRightWithCont` allows early termination by not calling the continuation.
+    ///
+    pub def foldRightWithCont(f: (a, Unit -> b \ {ef, r}) -> b \ {ef, r}, z: b, v: MutList[a, r]): b \ { ef, Read(r) } =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        def loop(i) = {
+            if (i >= l)
+                z
+            else {
+                f(Array.get(i, a), _ -> loop(i + 1))
+            }
+        };
+        loop(0)
+
+    ///
+    /// Returns the result of mapping each element and combining the results.
+    ///
+    pub def foldMap(f: a -> b \ ef, v: MutList[a, r]): b \ {ef, Read(r)} with Monoid[b] =
+        foldLeft((acc, x) -> Monoid.combine(acc, f(x)), Monoid.empty(), v)
 
     ///
     /// Applies `f` to all elements in `v` going from left to right until a single value `v` is obtained. Returns `Some(v)`.
     ///
     /// Returns `None` if `v` is empty.
     ///
-    pub def reduceLeft(f: (a, a) -> a & e, v: MutList[a]): Option[a] & Impure = foldLeft((acc, x) -> match acc {
-        case Some(y) => Some(f(y, x))
-        case None => Some(x)
-    }, None, v)
+    pub def reduceLeft(f: (a, a) -> a \ ef, v: MutList[a, r]): Option[a] \ { ef, Read(r) } =
+        foldLeft((acc, x) -> match acc {
+            case Some(y) => Some(f(y, x))
+            case None => Some(x)
+        }, None, v)
 
     ///
     /// Applies `f` to all elements in `v` going from right to left until a single value `v` is obtained. Returns `Some(v)`.
     ///
     /// Returns `None` if `v` is empty.
     ///
-    pub def reduceRight(f: (a, a) -> a & e, v: MutList[a]): Option[a] & Impure = foldRight((x, acc) -> match acc {
-        case Some(y) => Some(f(x, y))
-        case None => Some(x)
-    }, None, v)
+    pub def reduceRight(f: (a, a) -> a \ ef, v: MutList[a, r]): Option[a] \ { ef, Read(r) } =
+        foldRight((x, acc) -> match acc {
+            case Some(y) => Some(f(x, y))
+            case None => Some(x)
+        }, None, v)
 
     ///
     /// Removes all elements from the given mutable list `v`.
     ///
-    pub def clear!(v: mut MutList[a]): Unit & Impure =
-        let MutList(a, l) = v;
-        a := Array.new(default, Array.length(deref a));
+    pub def clear!(v: MutList[a, r]): Unit \ { Read(r), Write(r) } =
+        let MutList(r, a, l) = v;
+        a := Array.new(r, Array.length(deref a));
         l := 0
 
     ///
     /// Returns a shallow copy of the given mutable list `v`.
+    /// The capacity of the copy is equal to the length of the list.
     ///
-    pub def copy(v: MutList[a]): MutList[a] & Impure =
-        let MutList(a, l) = v;
+    pub def copy(r1: Region[r1], v: MutList[a, r]): MutList[a, r1] \ { Read(r), Write(r1) } =
+        let MutList(_, a, l) = v;
         let len = deref l;
-        MutList(ref Array.slice(deref a, 0, Array.length(deref a)), ref len)
+        if (len > minCapacity())
+            MutList(r1, ref Array.copyOfRange(r1, 0, len, deref a) @ r1, ref len @ r1)
+        else
+            MutList(r1, ref Array.copyOfRange(r1, 0, capacity(v), deref a) @ r1, ref len @ r1)
 
     ///
     /// Optionally removes and returns the last element in the given mutable list `v`.
     ///
-    pub def pop!(v: mut MutList[a]): Option[a] & Impure =
-        let MutList(a, l) = v;
+    pub def pop!(v: MutList[a, r]): Option[a] \ { Read(r), Write(r) } =
+        let MutList(_, a, l) = v;
         let len = deref l;
         if (len > 0)
-            let last = (deref a)[len - 1];
+            let last = Array.get(len - 1, deref a);
             l := len - 1;
-            Array.put(deref a, len - 1, default);
+            Array.put(Reflect.default(), len - 1, deref a);
             compress!(v);
             Some(last)
         else
@@ -464,21 +564,14 @@ namespace MutList {
     ///
     /// Inserts the given element `x` at the end of the given mutable list `v`.
     ///
-    pub def push!(x: a, v: mut MutList[a]): Unit & Impure =
-        let MutList(a, l) = v;
+    pub def push!(x: a, v: MutList[a, r]): Unit \ { Read(r), Write(r) } =
+        let MutList(_, a, l) = v;
         let len = deref l;
-        if (len == 0) {
-            a := Array.new(x, 1);
-            l := 1
-        }
-        else {
-            if (capacity(v) - len == 0)
-                reserve!(len, v)
-            else
-                ();
-            (deref a)[len] = x;
-            l := len + 1
-        }
+        if (capacity(v) - len == 0)
+            reserve!(len, v)
+        else ();
+        (deref a)[len] = x;
+        l := len + 1
 
     ///
     /// Inserts the given element `x` at the given position `i` in the given mutable list `v`.
@@ -487,23 +580,16 @@ namespace MutList {
     ///
     /// If the given index `i` exceeds the length of the mutable list, the element is inserted at the last position.
     ///
-    pub def insert!(x: a, i: Int32, v: mut MutList[a]): Unit & Impure =
-        let MutList(a, l) = v;
+    pub def insert!(x: a, i: Int32, v: MutList[a, r]): Unit \ { Read(r), Write(r) } =
+        let MutList(r, a, l) = v;
         let len = deref l;
-        if (len == 0) {
-            a := Array.new(x, 1);
-            l := 1
-        }
-        else {
-            if (capacity(v) - len == 0)
-                reserve!(len, v)
-            else
-                ();
-            let sub = Array.slice(deref a, i, len);
-            Array.updateSequence!(i + 1, sub, deref a);
-            (deref a)[i] = x;
-            l := len + 1
-        }
+        if (capacity(v) - len == 0)
+            reserve!(len, v)
+        else ();
+        let sub = Array.copyOfRange(r, i, len, deref a);
+        Array.updateSequence!(i + 1, sub, deref a);
+        (deref a)[i] = x;
+        l := len + 1
 
     ///
     /// Removes the element at the given position `i` in the given mutable list `v`.
@@ -512,99 +598,94 @@ namespace MutList {
     ///
     /// If the given index `i` exceeds the length of the mutable list, no element is removed.
     ///
-    pub def remove!(i: Int32, v: mut MutList[a]): Unit & Impure =
-        let MutList(a, l) = v;
-        let len = deref l;
-        if (i < len) {
-            removeHelper!(i, len, deref a);
-            l := len - 1;
+    pub def remove!(i: Int32, v: MutList[a, r]): Unit \ { Read(r), Write(r) } =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        let n = l - 1;
+        def loop(i1) = {
+            if (i1 < n) {
+                a[i1] = Array.get(i1 + 1, a);
+                loop(i1 + 1)
+            }
+            else if (i1 == n) {
+                a[i1] = Reflect.default()
+            }
+            else
+                ()
+        };
+        if (i < l) {
+            loop(i);
+            rl := n;
             compress!(v)
         }
         else
             ()
 
     ///
-    /// Helper function for `remove!`.
+    /// Appends `m` to `v` i.e. inserts all elements from `m` into the end of `v`.
     ///
-    def removeHelper!(i: Int32, n: Int32, a: Array[a]): Unit & Impure =
-        if (i < n - 1) {
-            a[i] = a[i + 1];
-            removeHelper!(i + 1, n, a)
-        }
-        else if (i == n - 1)
-            a[i] = default
-        else
-            ()
+    pub def pushAll!(m: m[a], v: MutList[a, r]): Unit \ { Read(r), Write(r) } with Foldable[m] =
+        Foldable.forEach(x -> MutList.push!(x, v), m)
 
     ///
-    /// Inserts all the elements in the given mutable list `v2` into the mutable list `v1`.
+    /// Appends `m` to `v` i.e. inserts all elements from `m` into the end of `v`.
     ///
-    pub def append!(v1: mut MutList[a], v2: MutList[a]): Unit & Impure =
-        let MutList(a1, l1) = v1;
-        let MutList(a2, l2) = v2;
-        let len1 = deref l1;
-        let len2 = deref l2;
-        if (len2 > Array.length(deref a1) - len1)
-            reserve!(len2, v1)
-        else
-            ();
-        Array.updateSequence!(len1, deref a2, deref a1);
-        l1 := len1 + len2
+    pub def append!(m: m[a], v: MutList[a, r]): Unit \ { Read(r), Write(r) } with Foldable[m] =
+        pushAll!(m, v)
 
     ///
     /// Removes all elements from the given mutable list `v` that do not satisfy the given predicate `f`.
     ///
-    pub def retain!(f: a -> Bool, v: mut MutList[a]): Unit & Impure =
-        let MutList(a1, l1) = v;
-        let l = new();
-        foreach(e -> if (f(e)) push!(e, l) else (), v);
-        let MutList(a2, l2) = l;
+    pub def retain!(f: a -> Bool, v: MutList[a, r]): Unit \ { Read(r), Write(r) } =
+        let MutList(r, a1, l1) = v;
+        let l = new MutList(r);
+        forEach(e -> if (f(e)) push!(e, l) else (), v);
+        let MutList(_, a2, l2) = l;
         a1 := deref a2;
         l1 := deref l2
 
     ///
-    /// Replaces all occurrences of the `x` with `y` in the given mutable list `v`.
+    /// Replaces all occurrences of the `from` with `to` in the given mutable list `v`.
     ///
-    pub def replace![a : Eq](x: a, y: a, v: mut MutList[a]): Unit & Impure =
-        transform!(e -> if (e == x) y else e, v)
+    pub def replace!(from: {from = a}, to: {to = a}, v: MutList[a, r]): Unit \ { Read(r), Write(r) } with Eq[a] =
+        transform!(e -> if (e == from.from) to.to else e, v)
 
     ///
     /// Reverses the order of the elements in the given mutable list `v`.
     ///
-    pub def reverse!(v: mut MutList[a]): Unit & Impure =
-        let MutList(a, l) = v;
-        let len = deref l;
-        reverseHelper!(deref a, len / 2, 0, len - 1)
+    pub def reverse!(v: MutList[a, r]): Unit \ { Read(r), Write(r) } =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        let halflen = l / 2;
+        def loop(i, j) = {
+            if (i >= halflen)
+                ()
+            else {
+                let x = Array.get(i, a);
+                let y = Array.get(j, a);
+                Array.put(y, i, a);
+                Array.put(x, j, a);
+                loop(i + 1, j - 1)
+            }
+        };
+        loop(0, l - 1)
 
     ///
-    /// Helper function for `reverse!`.
-    ///
-    def reverseHelper!(a: mut Array[a], halflen: Int32, i: Int32, j: Int32): Unit & Impure =
-        if (i >= halflen)
-            ()
-        else {
-            let x = a[i];
-            let y = a[j];
-            Array.put(a, i, y);
-            Array.put(a, j, x);
-            reverseHelper!(a, halflen, i + 1, j - 1)
-        }
-
-    ///
-    /// Shrinks the given mutable list `v` down to a capacity of `n` elements.
+    /// Shrinks the given mutable list `v` down to a capacity of `n` elements but no less than 8.
     ///
     /// Truncates the mutable list as needed.
     ///
-    pub def shrinkTo!(n: Int32, v: mut MutList[a]): Unit & Impure =
-        let MutList(a, l) = v;
-        if (n == 0) {
-            a := [];
-            l := 0
-        }
-        else if (n < capacity(v)) {
-            let f = i -> if (i < n) (deref a)[i] else default;
-            a := Array.init(f, n);
-            l := n
+    def shrinkTo!(n: Int32, v: MutList[a, r]): Unit \ { Read(r), Write(r) } =
+        let minCap = minCapacity();
+        let capv = capacity(v);
+        let MutList(r, a, l) = v;
+        if (n < capv and capv != minCap) {
+            let len = deref l;
+            let newCap = Order.max(n, minCap);
+            a := Array.copyOfRange(r, 0, newCap, deref a);
+            l := Order.min(len, newCap)
         }
         else
             ()
@@ -612,7 +693,8 @@ namespace MutList {
     ///
     /// Shrinks the given mutable list `v` to its actual size.
     ///
-    pub def shrink!(v: mut MutList[a]): Unit & Impure = shrinkTo!(length(v), v)
+    pub def shrink!(v: MutList[a, r]): Unit \ { Read(r), Write(r) } =
+        shrinkTo!(length(v), v)
 
     ///
     /// Truncates the given mutable list `v` to the given length `l`.
@@ -621,13 +703,15 @@ namespace MutList {
     ///
     /// If the given length `l` is negative, all elements are removed.
     ///
-    pub def truncate!(l: Int32, v: mut MutList[a]): Unit & Impure =
+    pub def truncate!(l: Int32, v: MutList[a, r]): Unit \ { Read(r), Write(r) } =
         if (l < 0)
             clear!(v)
         else if (l < length(v)) {
-            let MutList(a, l0) = v;
+            let MutList(r, a, l0) = v;
+            let minCap = minCapacity();
+            let c = Order.max(l, minCap);
             l0 := l;
-            Array.updateSequence!(0, deref a, Array.new(default, l))
+            Array.updateSequence!(0, deref a, Array.new(r, c))
         }
         else
             ()
@@ -639,124 +723,151 @@ namespace MutList {
     ///
     /// The content of the mutable list is unchanged.
     ///
-    pub def reserve!(n: Int32, v: mut MutList[a]): Unit & Impure =
-        let MutList(a, l) = v;
-        let len = deref l;
-        if (len == 0)
-            a := Array.new(default, n)
-        else {
-            let f = i ->
-                if (i < len)
-                    (deref a)[i]
-                else
-                    default;
-            a := Array.init(f, len + n)
-        }
+    pub def reserve!(n: Int32, v: MutList[a, r]): Unit \ { Read(r), Write(r) } =
+        let MutList(r, a, l) = v;
+        a := Array.copyOfRange(r, 0, (deref l) + n, deref a)
 
     ///
     /// Returns `v` as an immutable list.
     ///
-    pub def toImmutable(v: MutList[a]): List[a] & Impure =
+    pub def toList(v: MutList[a, r]): List[a] \ Read(r) =
         foldRight((x, acc) -> x :: acc, Nil, v)
 
     ///
     /// Returns `v` as an array.
     ///
-    pub def toArray(v: MutList[a]): Array[a] & Impure =
-        let l = length(v);
-        if (l == 0)
-            []
-        else {
-            let a = Array.new(get(0, v), l);
-            foreachWithIndex((x, i) -> a[l - i - 1] = x, v);
-            a
-        }
+    pub def toArray(r1: Region[r1], v: MutList[a, r2]): Array[a, r1] \ { Read(r2), Write(r1) } =
+        let MutList(_, a, l) = v;
+        Array.copyOfRange(r1, 0, deref l, deref a)
 
     ///
-    /// Returns `true` if the mutable lists `v1` and `v2` have the same elements, i.e. are structurally equal.
+    /// Returns `xs` as a vector.
     ///
-    pub def sameElements[a : Eq](v1: MutList[a], v2: MutList[a]): Bool & Impure =
-        let MutList(a1, l1) = v1;
-        let MutList(a2, l2) = v2;
-        let len1 = deref l1;
-        let len2 = deref l2;
-        len1 == len2 and sameElementsHelper(deref a1, deref a2, 0, len1)
+    pub def toVector(xs: MutList[a, r]): Vector[a] \ Read(r) = region rc {
+        let arr = Array.new(rc, length(xs));
+        forEachWithIndex((i, x) -> Array.put(x, i, arr), xs);
+        Array.toVector(arr)
+    }
 
     ///
-    /// Helper function for `sameElements`.
+    /// Returns the mutable list `xs` as a chain.
     ///
-    def sameElementsHelper[a : Eq](a1: Array[a], a2: Array[a], i: Int32, n: Int32): Bool & Impure =
-        if (i >= n)
-            true
-        else
-            a1[i] == a2[i] and sameElementsHelper(a1, a2, i + 1, n)
+    pub def toChain(xs: MutList[a, r]): Chain[a] \ Read(r) =
+        foldLeft((ac, x) -> Chain.snoc(ac, x), Chain.empty(), xs)
 
     ///
-    /// Render `v` as a String. Elements are rendered with the
-    /// function `f` and separated with the string `sep`.
+    /// Returns `v` as a MutDeque.
     ///
-    pub def formatWith(f: a -> String, sep: String, v: MutList[a]): String & Impure =
-        let sb = StringBuilder.new();
-        let step = (x,i) ->
+    pub def toMutDeque(r1: Region[r1], v: MutList[a, r2]): MutDeque[a, r1] \ { Read(r2), Write(r1) }  =
+        let d = new MutDeque(r1);
+        forEach(x -> MutDeque.pushBack(x, d), v);
+        d
+
+    ///
+    /// Returns `true` if the mutable lists `v1` and `v2` have the same elements in the same order, i.e. are structurally equal.
+    ///
+    pub def sameElements(v1: MutList[a, r1], v2: MutList[a, r2]): Bool \ Read(r1, r2) with Eq[a] =
+        let MutList(_, ra1, rl1) = v1;
+        let MutList(_, ra2, rl2) = v2;
+        let a1 = deref ra1;
+        let a2 = deref ra2;
+        let l1 = deref rl1;
+        let l2 = deref rl2;
+        def loop(i) = {
+            if (i >= l1)
+                true
+            else if (Array.get(i, a1) == Array.get(i, a2))
+                loop(i + 1)
+            else
+                false
+        };
+        if (l1 == l2) loop(0) else false
+
+    ///
+    /// Returns the concatenation of the string representation
+    /// of each element in `v` with `sep` inserted between each element.
+    ///
+    pub def join(sep: String, v: MutList[a, r]): String \ Read(r) with ToString[a] =
+        joinWith(ToString.toString, sep, v)
+
+    ///
+    /// Returns the concatenation of the string representation
+    /// of each element in `v` according to `f` with `sep` inserted between each element.
+    ///
+    pub def joinWith(f: a -> String \ ef, sep: String, v: MutList[a, r]): String \ { ef, Read(r) } = region r1 {
+        let sb = new StringBuilder(r1);
+        let step = (i, x) ->
             if (i == 0)
-                StringBuilder.appendString!(sb, f(x))
+                StringBuilder.appendString!(f(x), sb)
             else {
-                StringBuilder.appendString!(sb, sep);
-                StringBuilder.appendString!(sb, f(x))
+                StringBuilder.appendString!(sep, sb);
+                StringBuilder.appendString!(f(x), sb)
             };
-        foreachWithIndex(step, v);
+        forEachWithIndex(step, v);
         StringBuilder.toString(sb)
+    }
 
     ///
-    /// Apply the effectful function `f` to all the elements in `v`.
+    /// Returns an iterator over `l`.
     ///
-    pub def foreach(f: a ~> Unit, v: MutList[a]): Unit & Impure =
-        let MutList(a, l) = v;
-        let len = deref l;
-        if (len < 1)
-            ()
-        else
-            foreachHelper(f, deref a, 0, len)
+    /// Modifying `l` while using an iterator has undefined behavior and is dangerous.
+    ///
+    pub def iterator(rc: Region[r1], l: MutList[a, r2]): Iterator[a, r1 and r2, r1] \ { Write(r1), Read(r2) } =
+        let MutList(_, a, len) = l;
+        let len1 = deref len;
+        let ix = ref 0 @ rc;
+        let next = () -> {
+            let i = deref ix;
+            if (i < len1) {
+                let x = Array.get(i, deref a);
+                ix := i + 1;
+                Some(x)
+            } else {
+                None
+            }
+        };
+        Iterator.iterate(rc, next)
 
     ///
-    /// Helper function for `foreach`.
+    /// Applies `f` to all the elements in `v`.
     ///
-    def foreachHelper(f: a ~> Unit, a: Array[a], i: Int32, n: Int32): Unit & Impure =
-        if (i >= n)
-            ()
-        else {
-            f(a[i]);
-            foreachHelper(f, a, i + 1, n)
-        }
+    pub def forEach(f: a -> Unit \ ef, v: MutList[a, r]): Unit \ { ef, Read(r) } =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        def loop(i) = {
+            if (i >= l)
+                ()
+            else {
+                f(Array.get(i, a));
+                loop(i + 1)
+            }
+        };
+        loop(0)
 
     ///
-    /// Apply the effectful function `f` to all the elements in `v`.
+    /// Applies `f` to all the elements in `v` along with that element's index.
     ///
-    pub def foreachWithIndex(f: (a, Int32) ~> Unit, v: MutList[a]): Unit & Impure =
-        let MutList(a, l) = v;
-        let len = deref l;
-        if (len < 1)
-            ()
-        else
-            foreachWithIndexHelper(f, deref a, 0, len)
-
-    ///
-    /// Helper function for `foreachWithIndex`.
-    ///
-    def foreachWithIndexHelper(f: (a, Int32) ~> Unit, a: Array[a], i: Int32, n: Int32): Unit & Impure =
-        if (i >= n)
-            ()
-        else {
-            f(a[i], i);
-            foreachWithIndexHelper(f, a, i + 1, n)
-        }
+    pub def forEachWithIndex(f: (Int32, a) -> Unit \ ef, v: MutList[a, r]): Unit \ { ef, Read(r) } =
+        let MutList(_, ra, rl) = v;
+        let a = deref ra;
+        let l = deref rl;
+        def loop(i) = {
+            if (i >= l)
+                ()
+            else {
+                f(i, Array.get(i, a));
+                loop(i + 1)
+            }
+        };
+        loop(0)
 
     ///
     /// Compresses the given mutable list `v` if needed.
     ///
-    /// The mutable will be shrunk to 1/2 of its size if the load factor is less than 1/4.
+    /// The mutable list will be shrunk to 1/2 of its size if the load factor is less than 1/4.
     ///
-    pub def compress!(v: mut MutList[a]): Unit & Impure =
+    pub def compress!(v: MutList[a, r]): Unit \ { Read(r), Write(r) } =
         let c = capacity(v);
         let len = length(v);
         let loadFactor = Int32.toFloat32(len) / Int32.toFloat32(c);
@@ -772,8 +883,84 @@ namespace MutList {
     ///
     /// Returns the capacity of `v`.
     ///
-    pub def capacity(v: MutList[a]): Int32 & Impure =
-        let MutList(a, _) = v;
+    def capacity(v: MutList[a, r]): Int32 \ Read(r) =
+        let MutList(_, a, _) = v;
         Array.length(deref a)
+
+    ///
+    /// Returns a sorted copy of MutList `v`, where the elements are ordered from low to high according to
+    /// their `Order` instance.
+    ///
+    /// The sort is not stable, i.e., equal elements may appear in a different order than in the input `v`.
+    ///
+    /// The sort implementation is a Quicksort.
+    ///
+    pub def sort(r1: Region[r1], v: MutList[a, r]): MutList[a, r1] \ { Read(r), Write(r1) } with Order[a] =
+        sortWith(r1, Order.compare, v)
+
+    ///
+    /// Returns a sorted copy of MutList `v`, where the elements are ordered from low to high according to
+    /// the `Order` instance for the values obtained by applying `f` to each element.
+    ///
+    /// The sort is not stable, i.e., equal elements may appear in a different order than in the input `v`.
+    ///
+    /// The sort implementation is a Quicksort.
+    ///
+    pub def sortBy(r1: Region[r1], f: a -> b, v: MutList[a, r]): MutList[a, r1] \ { Read(r), Write(r1) } with Order[b] =
+        sortWith(r1, Order.compare `on` f, v)
+
+    ///
+    /// Returns a sorted copy of MutList `v`, where the elements are ordered from low to high according to
+    /// the comparison function `cmp`.
+    ///
+    /// The sort is not stable, i.e., equal elements may appear in a different order than in the input `v`.
+    ///
+    /// The sort implementation is a Quicksort.
+    ///
+    pub def sortWith(r1: Region[r1], cmp: (a,a) -> Comparison, v: MutList[a, r]): MutList[a, r1] \ { Read(r), Write(r1) } =
+        let vCopy = copy(r1, v);
+        sortWith!(cmp, vCopy);
+        vCopy
+
+    ///
+    /// Sort MutList `v` so that elements are ordered from low to high according to their `Order` instance.
+    /// The MutList is mutated in-place.
+    ///
+    /// The sort is not stable, i.e., equal elements may appear in a different order than in the input `v`.
+    ///
+    /// The sort implementation is a Quicksort.
+    ///
+    pub def sort!(v: MutList[a, r]): Unit \ { Read(r), Write(r) } with Order[a] =
+        sortWith!(Order.compare, v)
+
+    ///
+    /// Sort MutList `v` so that elements are ordered from low to high according to the `Order` instance for
+    /// the values obtained by applying `f` to each element. The MutList is mutated in-place.
+    ///
+    /// The sort is not stable, i.e., equal elements may appear in a different order than in the input `v`.
+    ///
+    /// The sort implementation is a Quicksort.
+    ///
+    pub def sortBy!(f: a -> b, v: MutList[a, r]): Unit \ { Read(r), Write(r) } with Order[b] =
+        sortWith!(Order.compare `on` f, v)
+
+    ///
+    /// Sort MutList `v` so that elements are ordered from low to high according to the comparison function `cmp`.
+    /// The MutList is mutated in-place.
+    ///
+    /// The sort is not stable, i.e., equal elements may appear in a different order than in the input `v`.
+    ///
+    /// The sort implementation is a Quicksort.
+    ///
+    pub def sortWith!(cmp: (a,a) -> Comparison, v: MutList[a, r]): Unit \ { Read(r), Write(r) } =
+        let MutList(_, a, l) = v;
+        Array.sortWithin!(cmp, 0, (deref l) - 1, deref a)
+
+    ///
+    /// Shuffles `v` using the Fisher–Yates shuffle.
+    ///
+    pub def shuffle(r1: Region[r1], rnd: Random, v: MutList[a, r1]): MutList[a, r1] \ { Read(r1), Write(r1), NonDet } = region r2 {
+        toArray(r2, v) !> Array.shuffle(rnd) |> Array.toMutList(r1)
+    }
 
 }

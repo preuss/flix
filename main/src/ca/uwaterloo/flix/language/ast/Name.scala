@@ -33,7 +33,14 @@ object Name {
     val index = fqn.indexOf('.')
     val parts = fqn.substring(0, index).split('/').toList
     val name = fqn.substring(index + 1, fqn.length)
-    val nname = NName(sp1, parts.map(t => Name.Ident(sp1, t, sp2)), sp2)
+    mkQName(parts, name, sp1, sp2)
+  }
+
+  /**
+    * Creates a qualified name from the given namespace `ns` and name `name`.
+    */
+  def mkQName(ns: List[String], name: String, sp1: SourcePosition, sp2: SourcePosition): QName = {
+    val nname = NName(sp1, ns.map(t => Name.Ident(sp1, t, sp2)), sp2)
     val ident = Ident(sp1, name, sp2)
     QName(sp1, nname, ident, sp2)
   }
@@ -54,19 +61,17 @@ object Name {
   def mkPred(ident: Ident): Pred = Pred(ident.name, SourceLocation.mk(ident.sp1, ident.sp2))
 
   /**
-    * Converts the given identifier `ident` to a tag name.
-    */
-  def mkTag(ident: Ident): Tag = Tag(ident.name, SourceLocation.mk(ident.sp1, ident.sp2))
-
-  /**
     * Extends the given namespace `ns` with the given identifier `ident`.
     */
   def extendNName(ns: NName, ident: Ident): NName = NName(ident.sp1, ns.idents :+ ident, ident.sp2)
 
   /**
-    * Extends the given namespace `ns` with the given name `name`.
+    * Builds an unlocated name from the given namespace parts.
     */
-  def extendNName(ns: NName, name: String): NName = extendNName(ns, Ident(SourcePosition.Unknown, name, SourcePosition.Unknown))
+  def mkUnlocatedNName(parts: List[String]): NName = {
+    val idents = parts.map(Ident(SourcePosition.Unknown, _, SourcePosition.Unknown))
+    NName(SourcePosition.Unknown, idents, SourcePosition.Unknown)
+  }
 
   /**
     * Identifier.
@@ -85,6 +90,11 @@ object Name {
       * Returns `true` if `this` identifier is uppercase.
       */
     def isUpper: Boolean = name.charAt(0).isUpper
+
+    /**
+      * Returns `true` if `this` identifier is lowercase.
+      */
+    def isLower: Boolean = name.charAt(0).isLower
 
     /**
       * The source location of the identifier.
@@ -108,6 +118,20 @@ object Name {
       * Human readable representation.
       */
     override def toString: String = name
+
+    /**
+      * Convert this Ident to synthetic
+      */
+    def asSynthetic = new SyntheticIdent(sp1, name, sp2)
+  }
+
+  /**
+    * Synthetic Identifier
+    *
+    * Behaves just like Ident, but reports its `loc` as synthetic.
+    */
+  class SyntheticIdent(sp1: SourcePosition, name: String, sp2: SourcePosition) extends Ident(sp1, name, sp2) {
+    override def loc: SourceLocation = SourceLocation.mk(sp1, sp2, SourceKind.Synthetic)
   }
 
   /**
@@ -163,6 +187,18 @@ object Name {
       case None => Name.QName(sp1, RootNS, ident, sp2)
       case Some(ns) => Name.QName(sp1, ns, ident, sp2)
     }
+
+    /**
+      * Converts the given NName into a qualified name.
+      */
+    def fromNName(nname0: Name.NName): QName = {
+      val sp1 = nname0.idents.head.sp1
+      val sp2 = nname0.idents.last.sp2
+      val ns = nname0.idents.init
+      val ident = nname0.idents.last
+      val nname = Name.NName(sp1, ns, sp2)
+      Name.QName(sp1, nname, ident, sp2)
+    }
   }
 
   /**
@@ -199,6 +235,11 @@ object Name {
       * The source location of the name.
       */
     def loc: SourceLocation = SourceLocation.mk(sp1, sp2)
+
+    /**
+      * Converts this name into a namespace.
+      */
+    def toNName: NName = extendNName(namespace, ident)
 
     /**
       * Human readable representation.
@@ -259,29 +300,17 @@ object Name {
   }
 
   /**
-    * The name of a tag.
+    * Java Name.
     *
-    * @param name the name of the predicate.
-    * @param loc  the specific occurrence of the name.
+    * @param sp1  the position of the first character in the identifier.
+    * @param fqn  the fully qualified name.
+    * @param sp2  the position of the last character in the identifier.
     */
-  case class Tag(name: String, loc: SourceLocation) {
-    /**
-      * Two predicate names are equal if their names are the same.
-      */
-    override def hashCode(): Int = name.hashCode
-
-    /**
-      * Two predicate names are equal if their names are the same.
-      */
-    override def equals(o: Any): Boolean = o match {
-      case that: Tag => this.name == that.name
-      case _ => false
-    }
+  case class JavaName(sp1: SourcePosition, fqn: Seq[String], sp2: SourcePosition) {
 
     /**
       * Human readable representation.
       */
-    override def toString: String = name
+    override def toString: String = fqn.mkString(".")
   }
-
 }

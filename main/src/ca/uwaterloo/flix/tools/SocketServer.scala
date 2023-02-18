@@ -15,15 +15,11 @@
  */
 package ca.uwaterloo.flix.tools
 
-import java.net.InetSocketAddress
-import java.text.SimpleDateFormat
-import java.util.Date
-
 import ca.uwaterloo.flix.api.{Flix, Version}
+import ca.uwaterloo.flix.util.Formatter.NoFormatter
 import ca.uwaterloo.flix.util.Result.{Err, Ok}
 import ca.uwaterloo.flix.util.Validation._
-import ca.uwaterloo.flix.util.vt.TerminalContext
-import ca.uwaterloo.flix.util.{InternalCompilerException, InternalRuntimeException, Options, Result, SafeExec, Timer}
+import ca.uwaterloo.flix.util._
 import org.java_websocket.WebSocket
 import org.java_websocket.handshake.ClientHandshake
 import org.java_websocket.server.WebSocketServer
@@ -31,6 +27,10 @@ import org.json4s.JsonAST._
 import org.json4s.ParserUtil.ParseException
 import org.json4s.native.JsonMethods
 import org.json4s.native.JsonMethods._
+
+import java.net.InetSocketAddress
+import java.text.SimpleDateFormat
+import java.util.Date
 
 /**
   * A WebSocket server implementation that receives and evaluates Flix programs.
@@ -43,6 +43,11 @@ class SocketServer(port: Int) extends WebSocketServer(new InetSocketAddress(port
     * The custom date format to use for logging.
     */
   val DateFormat: String = "yyyy-MM-dd HH:mm:ss"
+
+  /**
+    * The Flix instance (the same instance is used for incremental compilation).
+    */
+  private val flix: Flix = new Flix().setFormatter(NoFormatter)
 
   /**
     * Invoked when the server is started.
@@ -84,10 +89,10 @@ class SocketServer(port: Int) extends WebSocketServer(new InetSocketAddress(port
     * Invoked when an error occurs.
     */
   override def onError(ws: WebSocket, e: Exception): Unit = e match {
-    case ex: InternalCompilerException =>
+    case _: InternalCompilerException =>
       log(s"Unexpected error: ${e.getMessage}")(ws)
       e.printStackTrace()
-    case ex: InternalRuntimeException =>
+    case _: RuntimeException =>
       log(s"Unexpected error: ${e.getMessage}")(ws)
       e.printStackTrace()
     case ex => throw ex
@@ -118,18 +123,10 @@ class SocketServer(port: Int) extends WebSocketServer(new InetSocketAddress(port
       case _ => false
     }
 
-    // --Xno-stratifier
-    val xnostratifier = json \\ "xnostratifier" match {
-      case JBool(b) => b
-      case _ => false
-    }
-
     // Construct the options object.
     val opts = Options.Default.copy(
-      core = xcore,
-      writeClassFiles = false,
-      xallowredundancies = xallowredundancies,
-      xnostratifier = xnostratifier,
+      lib = if (xcore) LibLevel.Min else LibLevel.All,
+      xallowredundancies = xallowredundancies
     )
 
     // Return the source and options.
@@ -157,7 +154,7 @@ class SocketServer(port: Int) extends WebSocketServer(new InetSocketAddress(port
     // Log whether evaluation was successful.
     log("")(ws)
     result match {
-      case Ok(__) => log("Evaluation was successful. Sending response:")(ws)
+      case Ok(_) => log("Evaluation was successful. Sending response:")(ws)
       case Err(_) => log("Evaluation failure. Sending response:")(ws)
     }
     log("")(ws)
@@ -180,7 +177,10 @@ class SocketServer(port: Int) extends WebSocketServer(new InetSocketAddress(port
   private def eval(input: String, opts: Options)(implicit ws: WebSocket): Result[(String, Long, Long), String] = {
     try {
       // Compile the program.
-      mkFlix(input, opts).compile() match {
+      flix.addSourceCode("<input>", input)
+      flix.setOptions(opts)
+
+      flix.compile() match {
         case Success(compilationResult) =>
           // Compilation was successful.
 
@@ -188,19 +188,19 @@ class SocketServer(port: Int) extends WebSocketServer(new InetSocketAddress(port
           compilationResult.getMain match {
             case None =>
               // The main function was not present. Just report successful compilation.
-              Ok("Compilation was successful. No main function to run.", compilationResult.getTotalTime(), 0L)
+              Ok("Compilation was successful. No main function to run.", compilationResult.totalTime, 0L)
             case Some(main) =>
               // Evaluate the main function and get the result as a string.
               val timer = new Timer({
-                val (result, stdOut, stdErr) = SafeExec.execute(() => main(Array.empty))
+                val (_, stdOut, stdErr) = SafeExec.execute(() => main(Array.empty))
                 stdOut + stdErr
               })
-              Ok(timer.getResult, compilationResult.getTotalTime(), timer.getElapsed)
+              Ok(timer.getResult, compilationResult.totalTime, timer.getElapsed)
           }
 
-        case Failure(errors) =>
+        case failure =>
           // Compilation failed. Retrieve and format the first error message.
-          Err(errors.head.message.fmt(TerminalContext.NoTerminal))
+          Err(failure.errors.head.message(flix.getFormatter))
       }
     } catch {
       case ex: RuntimeException => Err(ex.getMessage)
@@ -225,15 +225,6 @@ class SocketServer(port: Int) extends WebSocketServer(new InetSocketAddress(port
         JField("version", JString(getVersionWithPort)),
       )
     }
-
-  /**
-    * Returns a fresh Flix object for the given `input` string.
-    */
-  private def mkFlix(input: String, opts: Options)(implicit ws: WebSocket): Flix = {
-    val flix = new Flix()
-    flix.setOptions(opts)
-    flix.addStr(input)
-  }
 
   /**
     * Logs the given message `msg` along with information about the connection `ws`.

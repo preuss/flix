@@ -17,25 +17,23 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.TestUtils
-import ca.uwaterloo.flix.language.CompilationError
+import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.errors.InstanceError
-import ca.uwaterloo.flix.util.Options
+import ca.uwaterloo.flix.util.{Formatter, Options}
 import org.scalatest.FunSuite
 
 class TestInstances extends FunSuite with TestUtils {
-
-  val DefaultOptions: Options = Options.DefaultTest.copy(core = true)
 
   test("Test.OverlappingInstance.01") {
     val input =
       """
         |class C[a]
         |
-        |instance C[Int]
+        |instance C[Int32]
         |
-        |instance C[Int]
+        |instance C[Int32]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.OverlappingInstances](result)
   }
 
@@ -47,9 +45,9 @@ class TestInstances extends FunSuite with TestUtils {
         |
         |instance C[a]
         |
-        |instance C[Int]
+        |instance C[Int32]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.OverlappingInstances](result)
   }
 
@@ -62,7 +60,7 @@ class TestInstances extends FunSuite with TestUtils {
         |
         |instance C[(x, y)]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.OverlappingInstances](result)
   }
 
@@ -71,11 +69,11 @@ class TestInstances extends FunSuite with TestUtils {
       """
         |class C[a]
         |
-        |instance C[a -> b & e]
+        |instance C[a -> b & p \ ef1]
         |
-        |instance C[x -> y & e]
+        |instance C[x -> y & q \ ef2]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.OverlappingInstances](result)
   }
 
@@ -92,7 +90,56 @@ class TestInstances extends FunSuite with TestUtils {
         |
         |instance C[Box[b]]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[InstanceError.OverlappingInstances](result)
+  }
+
+  test("Test.OverlappingInstances.06") {
+    val input =
+      """
+        | class C[a] {
+        |  pub def f(x: a, y: a): Bool
+        |}
+        |
+        |instance C[String] {
+        |  pub def f(_x: String, _y: String): Bool = true
+        |}
+        |
+        |instance C[String] {
+        |  pub def f(_x: String, _y: String): Bool = true
+        |}
+        |
+        |def g(x: String): Bool = C.f(x, x)
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[InstanceError.OverlappingInstances](result)
+  }
+
+  test("Test.OverlappingInstances.Bool.01") {
+    val input =
+      """
+        | class C[a]
+        |
+        |enum E[_: Bool]
+        |
+        |instance C[E[true]]
+        |instance C[E[false]]
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[InstanceError.OverlappingInstances](result)
+  }
+
+  test("Test.OverlappingInstances.Bool.02") {
+    val input =
+      """
+        | class C[a]
+        |
+        |enum E[_: Bool, _: Type]
+        |
+        |instance C[E[true, a]]
+        |instance C[E[false, a]]
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.OverlappingInstances](result)
   }
 
@@ -101,9 +148,9 @@ class TestInstances extends FunSuite with TestUtils {
       """
         |class C[a]
         |
-        |instance C[(a, Int)]
+        |instance C[(a, Int32)]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.ComplexInstanceType](result)
   }
 
@@ -112,9 +159,9 @@ class TestInstances extends FunSuite with TestUtils {
       """
         |class C[a]
         |
-        |instance C[() -> a]
+        |instance C[Unit -> a]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.ComplexInstanceType](result)
   }
 
@@ -127,20 +174,9 @@ class TestInstances extends FunSuite with TestUtils {
         |
         |class C[a]
         |
-        |instance C[Box[Int]]
+        |instance C[Box[Int32]]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[InstanceError.ComplexInstanceType](result)
-  }
-
-  test("Test.ComplexInstanceType.04") {
-    val input =
-      """
-        |class C[a]
-        |
-        |instance C[a -> b]
-        |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.ComplexInstanceType](result)
   }
 
@@ -149,9 +185,9 @@ class TestInstances extends FunSuite with TestUtils {
       """
         |class C[a]
         |
-        |instance C[Int -> b & e]
+        |instance C[Int32 -> b & e]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.ComplexInstanceType](result)
   }
 
@@ -166,7 +202,7 @@ class TestInstances extends FunSuite with TestUtils {
         |
         |instance C[Box[a] -> b & e]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.ComplexInstanceType](result)
   }
 
@@ -177,7 +213,7 @@ class TestInstances extends FunSuite with TestUtils {
         |
         |instance C[a]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.ComplexInstanceType](result)
   }
 
@@ -188,7 +224,7 @@ class TestInstances extends FunSuite with TestUtils {
         |
         |instance C[(a, a)]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.DuplicateTypeVariableOccurrence](result)
   }
 
@@ -197,9 +233,9 @@ class TestInstances extends FunSuite with TestUtils {
       """
         |class C[a]
         |
-        |instance C[a -> a & e]
+        |instance C[a -> a & p \ ef]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.DuplicateTypeVariableOccurrence](result)
   }
 
@@ -214,7 +250,7 @@ class TestInstances extends FunSuite with TestUtils {
         |
         |instance C[DoubleBox[a, a]]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.DuplicateTypeVariableOccurrence](result)
   }
 
@@ -222,13 +258,13 @@ class TestInstances extends FunSuite with TestUtils {
     val input =
       """
         |class C[a] {
-        |    def get(): a
+        |    pub def get(): a
         |}
         |
         |instance C[Bool] {
         |}
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.MissingImplementation](result)
   }
 
@@ -236,14 +272,14 @@ class TestInstances extends FunSuite with TestUtils {
     val input =
       """
         |class C[a] {
-        |    def get(): a
+        |    pub def get(): a
         |}
         |
         |instance C[Bool] {
-        |    def get(_i: Int): Bool = false
+        |    pub def get(_i: Int32): Bool = false
         |}
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.MismatchedSignatures](result)
   }
 
@@ -251,7 +287,7 @@ class TestInstances extends FunSuite with TestUtils {
     val input =
       """
         |class C[a] {
-        |    def f(x: a): Bool
+        |    pub def f(x: a): Bool
         |}
         |
         |enum Box[a] {
@@ -259,10 +295,10 @@ class TestInstances extends FunSuite with TestUtils {
         |}
         |
         |instance C[Box[a]] {
-        |    def f[a: C](_x: Box[a]): Bool = false
+        |    pub def f(_x: Box[a]): Bool with C[a] = false
         |}
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.MismatchedSignatures](result)
   }
 
@@ -277,8 +313,8 @@ class TestInstances extends FunSuite with TestUtils {
         |    case Box(a)
         |}
         |
-        |instance C[Int] {
-        |    pub def f(x: Int): String = ""
+        |instance C[Int32] {
+        |    pub def f(x: Int32): String = ""
         |}
         |
         |instance C[Box[a]] {
@@ -287,24 +323,24 @@ class TestInstances extends FunSuite with TestUtils {
         |    }
         |}
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[CompilationError](result) // TODO should be MismatchedSignature
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[CompilationMessage](result) // TODO should be MismatchedSignature
   }
 
   test("Test.MismatchedSignatures.04") {
     val input =
       """
         |class C[a] {
-        |    def f[b : D](x: b): a
+        |    pub def f(x: b): a with D[b]
         |}
         |
         |class D[a]
         |
         |instance C[Bool] {
-        |    def f(x: b): Bool = false
+        |    pub def f(x: b): Bool = false
         |}
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.MismatchedSignatures](result)
   }
 
@@ -312,14 +348,14 @@ class TestInstances extends FunSuite with TestUtils {
     val input =
       """
         |class C[a] {
-        |    def f(x: a, y: Int): Int
+        |    pub def f(x: a, y: Int32): Int32
         |}
         |
         |instance C[Bool] {
-        |    def f(x: Bool, y: Int): Int & Impure = 123 as & Impure
+        |    pub def f(x: Bool, y: Int32): Int32 \ IO = unsafe_cast 123 as _ \ IO
         |}
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibMin)
     expectError[InstanceError.MismatchedSignatures](result)
   }
 
@@ -327,14 +363,14 @@ class TestInstances extends FunSuite with TestUtils {
     val input =
       """
         |class C[a] {
-        |    def f(x: a, y: Int): Int & e
+        |    pub def f(x: a, y: Int32): Int32 & e
         |}
         |
         |instance C[Bool] {
-        |    def f(x: Bool, y: Int): Int & Impure = 123 as & Impure
+        |    pub def f(x: Bool, y: Int32): Int32 \ IO = unsafe_cast 123 as _ \ IO
         |}
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibMin)
     expectError[InstanceError.MismatchedSignatures](result)
   }
 
@@ -344,10 +380,10 @@ class TestInstances extends FunSuite with TestUtils {
         |class C[a]
         |
         |instance C[Bool] {
-        |    def get(): Bool = false
+        |    pub def get(): Bool = false
         |}
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.ExtraneousDefinition](result)
   }
 
@@ -357,10 +393,10 @@ class TestInstances extends FunSuite with TestUtils {
         |class C[a]
         |
         |namespace C {
-        |    instance C[Int]
+        |    instance C[Int32]
         |}
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.OrphanInstance](result)
   }
 
@@ -371,9 +407,9 @@ class TestInstances extends FunSuite with TestUtils {
         |    pub class C[a]
         |}
         |
-        |instance N.C[Int]
+        |instance N.C[Int32]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.OrphanInstance](result)
   }
 
@@ -384,11 +420,11 @@ class TestInstances extends FunSuite with TestUtils {
         |    class C[a]
         |
         |    namespace C {
-        |        instance N.C[Int]
+        |        instance N.C[Int32]
         |    }
         |}
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.OrphanInstance](result)
   }
 
@@ -399,50 +435,211 @@ class TestInstances extends FunSuite with TestUtils {
         |    class C[a]
         |
         |    namespace O {
-        |        instance N.C[Int]
+        |        instance N.C[Int32]
         |    }
         |}
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.OrphanInstance](result)
   }
 
   test("Test.MissingSuperClassInstance.01") {
     val input =
       """
-        |class A[a] extends B[a]
+        |class A[a] with B[a]
         |class B[a]
         |
-        |instance A[Int]
+        |instance A[Int32]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.MissingSuperClassInstance](result)
   }
 
   test("Test.MissingSuperClassInstance.02") {
     val input =
       """
-        |class A[a] extends B[a], C[a]
+        |class A[a] with B[a], C[a]
         |class B[a]
         |class C[a]
         |
-        |instance A[Int]
-        |instance B[Int]
+        |instance A[Int32]
+        |instance B[Int32]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.MissingSuperClassInstance](result)
   }
 
   test("Test.MissingSuperClassInstance.03") {
     val input =
       """
-        |class A[a] extends B[a]
+        |class A[a] with B[a]
         |class B[a]
         |
-        |instance A[Int]
+        |instance A[Int32]
         |instance B[Bool]
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[InstanceError.MissingSuperClassInstance](result)
+  }
+
+  test("Test.UnlawfulSignature.01") {
+    val input =
+      """
+        |lawful class C[a] {
+        |    pub def f(): a
+        |}
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[InstanceError.UnlawfulSignature](result)
+  }
+
+  test("Test.UnlawfulSignature.02") {
+    val input =
+      """
+        |instance C[Int32] {
+        |    pub def f(x: Int32): Bool = true
+        |    pub def g(x: Int32): Bool = true
+        |}
+        |
+        |lawful class C[a] {
+        |  pub def f(x: a): Bool
+        |  pub def g(x: a): Bool
+        |
+        |  law l: forall (x: a) . C.f(x)
+        |}
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[InstanceError.UnlawfulSignature](result)
+  }
+
+  test("Test.MultipleErrors.01") {
+    val input =
+      """
+        |class Foo[a] {
+        |    pub def bar(): a
+        |}
+        |
+        |instance Foo[String] {
+        |    pub def qux(): Int32 = 2
+        |}
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[InstanceError.MissingImplementation](result)
+    expectError[InstanceError.ExtraneousDefinition](result)
+  }
+
+  test("Test.IllegalOverride.01") {
+    val input =
+      """
+        |class C[a] {
+        |  pub def f(x: a): Bool
+        |}
+        |
+        |instance C[Int32] {
+        |  override pub def f(x: Int32): Bool = true
+        |}
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[InstanceError.IllegalOverride](result)
+  }
+
+  test("Test.UnmarkedOverride.01") {
+    val input =
+      """
+        |class C[a] {
+        |  pub def f(x: a): Bool = true
+        |}
+        |
+        |instance C[Int32] {
+        |  pub def f(x: Int32): Bool = false
+        |}
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[InstanceError.UnmarkedOverride](result)
+  }
+
+  test("Test.ComplexErrorSuppressesOtherErrors.01") {
+    val input =
+      """
+        |class C[a] {
+        |  pub def f(x: a): Bool
+        |}
+        |
+        |instance C[Box[String]] {
+        |  pub def g(_x: Box[String]): Bool = false
+        |}
+        |
+        |enum Box[a] {
+        |    case Box(a)
+        |}
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[InstanceError.ComplexInstanceType](result)
+    rejectError[InstanceError.ExtraneousDefinition](result)
+  }
+
+  test("Test.TypeAliasInstance.01") {
+    val input =
+      """
+        |class C[a]
+        |type alias T = Int32
+        |instance C[T]
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[InstanceError.IllegalTypeAliasInstance](result)
+  }
+
+  test("Test.TypeAliasInstance.02") {
+    val input =
+      """
+        |class C[a]
+        |type alias T[a] = Int32
+        |instance C[T[a]]
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[InstanceError.IllegalTypeAliasInstance](result)
+  }
+
+  test("Test.MissingConstraint.01") {
+    val input =
+      """
+        |class C[a]
+        |class D[a] with C[a]
+        |
+        |instance C[(a, b)] with C[a], C[b]
+        |instance D[(a, b)]
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[InstanceError.MissingConstraint](result)
+  }
+
+  test("Test.MissingConstraint.02") {
+    val input =
+      """
+        |class C[a]
+        |class D[a] with C[a]
+        |class E[a] with D[a]
+        |
+        |class F[a]
+        |
+        |instance C[(a, b)] with C[a], C[b]
+        |instance D[(a, b)] with C[a], C[b], F[a], F[b]
+        |instance E[(a, b)] with C[a], C[b]
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[InstanceError.MissingConstraint](result)
+  }
+
+  test("Test.MissingConstraint.03") {
+    val input =
+      """
+        |class C[a]
+        |class D[a] with C[a]
+        |
+        |instance C[(a, b)] with C[a], C[b]
+        |instance D[(a, b)] with D[a], D[b]
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    rejectError[InstanceError.MissingConstraint](result)
   }
 }

@@ -15,6 +15,7 @@
  */
 package ca.uwaterloo.flix.language.phase.unification
 
+import ca.uwaterloo.flix.language.ast.RigidityEnv
 import ca.uwaterloo.flix.language.errors.TypeError
 import ca.uwaterloo.flix.util.Result
 import ca.uwaterloo.flix.util.Result.{Err, Ok}
@@ -25,17 +26,39 @@ import ca.uwaterloo.flix.util.Result.{Err, Ok}
 object InferMonad {
 
   /**
-    * Lifts the given value `a` into the type inference monad.
+    * A constant for the InferMonad over the empty list.
     */
-  def point[a](x: a): InferMonad[a] = InferMonad(s => Ok((s, x)))
+  val PointNil: InferMonad[Nil.type] = point(Nil)
+
+  /**
+    * Lifts the given value `x` into the type inference monad.
+    */
+  def point[A](x: A): InferMonad[A] = InferMonad { case (s, renv) => Ok((s, renv, x)) }
+
+  /**
+    * Lifts the given error `err` into the type inference monad.
+    */
+  def errPoint[A](err: TypeError): InferMonad[A] = InferMonad { case _ => Err(err) }
 
   /**
     * Collects the result of each type inference monad in `ts` going left to right.
     */
   def seqM[A](xs: List[InferMonad[A]]): InferMonad[List[A]] = xs match {
-    case Nil => point(Nil)
+    case Nil => PointNil
     case y :: ys => y flatMap {
       case r => seqM(ys) map {
+        case rs => r :: rs
+      }
+    }
+  }
+
+  /**
+    * Applies the function `f` to each element in the list, combining the results.
+    */
+  def traverseM[A, B](xs: List[A])(f: A => InferMonad[B]): InferMonad[List[B]] = xs match {
+    case Nil => PointNil
+    case y :: ys => f(y) flatMap {
+      case r => traverseM(ys)(f) map {
         case rs => r :: rs
       }
     }
@@ -44,17 +67,17 @@ object InferMonad {
 }
 
 /**
-  * A type inference state monad that maintains the current substitution.
+  * A type inference state monad that maintains the current substitution and rigidity environment.
   */
-case class InferMonad[A](run: Substitution => Result[(Substitution, A), TypeError]) {
+case class InferMonad[+A](run: (Substitution, RigidityEnv) => Result[(Substitution, RigidityEnv, A), TypeError]) {
   /**
     * Applies the given function `f` to the value in the monad.
     */
   def map[B](f: A => B): InferMonad[B] = {
-    def runNext(s0: Substitution): Result[(Substitution, B), TypeError] = {
+    def runNext(s0: Substitution, renv0: RigidityEnv): Result[(Substitution, RigidityEnv, B), TypeError] = {
       // Run the original function and map over its result (since it may have error'd).
-      run(s0) map {
-        case (s, a) => (s, f(a))
+      run(s0, renv0) map {
+        case (s, renv, a) => (s, renv, f(a))
       }
     }
 
@@ -65,13 +88,27 @@ case class InferMonad[A](run: Substitution => Result[(Substitution, A), TypeErro
     * Applies the given function `f` to the value in the monad.
     */
   def flatMap[B](f: A => InferMonad[B]): InferMonad[B] = {
-    def runNext(s0: Substitution): Result[(Substitution, B), TypeError] = {
+    def runNext(s0: Substitution, renv0: RigidityEnv): Result[(Substitution, RigidityEnv, B), TypeError] = {
       // Run the original function and flatMap over its result (since it may have error'd).
-      run(s0) flatMap {
-        case (s, a) => f(a) match {
+      run(s0, renv0) flatMap {
+        case (s, renv, a) => f(a) match {
           // Unwrap the returned monad and apply the inner function g.
-          case InferMonad(g) => g(s)
+          case InferMonad(g) => g(s, renv)
         }
+      }
+    }
+
+    InferMonad(runNext)
+  }
+
+  /**
+    * Applies the given function `f` to transform an error in the monad.
+    */
+  def transformError[B](f: TypeError => TypeError): InferMonad[A] = {
+    def runNext(s0: Substitution, renv0: RigidityEnv): Result[(Substitution, RigidityEnv, A), TypeError] = {
+      run(s0, renv0) match {
+        case Ok(t) => Ok(t)
+        case Err(e) => Err(f(e))
       }
     }
 
@@ -80,9 +117,10 @@ case class InferMonad[A](run: Substitution => Result[(Substitution, A), TypeErro
 
   // TODO: Necessary for pattern matching?
   // TODO: What should this return?
-  def withFilter(f: A => Boolean): InferMonad[A] = InferMonad(x => run(x) match {
-    case Ok((subst, t)) => if (f(t)) Ok((subst, t)) else Ok((subst, t))
-    case Err(e) => Err(e)
-  })
-
+  def withFilter(f: A => Boolean): InferMonad[A] = InferMonad {
+    case (x, renv0) => run(x, renv0) match {
+      case Ok((subst, renv, t)) => if (f(t)) Ok((subst, renv, t)) else Ok((subst, renv, t))
+      case Err(e) => Err(e)
+    }
+  }
 }

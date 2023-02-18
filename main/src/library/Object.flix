@@ -19,7 +19,31 @@ namespace Object {
     /// Returns `true` if the given value `x` is `null`.
     ///
     pub def isNull(x: a): Bool =
-        import java.util.Objects:isNull(##java.lang.Object);
-        isNull(x as ##java.lang.Object) as & Pure
+        import static java.util.Objects.isNull(##java.lang.Object): Bool \ {};
+        typematch x {
+            case _: Bool => false
+            case _: Char => false
+            case _: Float32 => false
+            case _: Float64 => false
+            case _: Int8 => false
+            case _: Int16 => false
+            case _: Int32 => false
+            case _: Int64 => false
+            case _: _ => isNull(unsafe_cast x as ##java.lang.Object)
+        }
+
+    ///
+    /// Returns `None` if the given value `x` is `null`, otherwise returns `Some(x)`.
+    ///
+    pub def toOption(x: a): Option[a] =
+        if (isNull(x)) None else Some(x)
+
+    ///
+    /// Unsafely converts `x` to a string using Java's built-in toString.
+    ///
+    @Unsafe
+    pub def toString(x: a): String =
+        import static java.util.Objects.toString(##java.lang.Object): String \ {};
+        toString(unsafe_cast x as ##java.lang.Object)
 
 }

@@ -1,8 +1,8 @@
 namespace Test/TypeAlias/Rel {
 
-    rel A(x: Int)
-    rel B(x: Int, y: Int)
-    rel C(x: Int, y: Int, z: Int)
+    rel A(x: Int32)
+    rel B(x: Int32, y: Int32)
+    rel C(x: Int32, y: Int32, z: Int32)
 
     @test
     def testTypeAlias01(): #{A} = #{
@@ -22,9 +22,9 @@ namespace Test/TypeAlias/Rel {
         C(1, 2, 3).
     }
 
-    rel D(x: List[Int])
-    rel E(x: Option[Int])
-    rel F(x: Result[Bool, String])
+    rel D(x: List[Int32])
+    rel E(x: Option[Int32])
+    rel F(x: Result[String, Bool])
 
     @test
     def testTypeAlias04(): #{D} = #{
@@ -49,7 +49,7 @@ namespace Test/TypeAlias/Rel {
     rel I[a, b, c](x: a, y: b, z: c)
 
     @test
-    def testPolyTypeAlias01(): #{G[Int]} = #{
+    def testPolyTypeAlias01(): #{G[Int32]} = #{
         G(1). G(2). G(3).
     }
 
@@ -59,32 +59,32 @@ namespace Test/TypeAlias/Rel {
     }
 
     @test
-    def testPolyTypeAlias03(): #{H[Bool, Int]} = #{
+    def testPolyTypeAlias03(): #{H[Bool, Int32]} = #{
         H(true, 21). H(false, 42).
     }
 
     @test
-    def testPolyTypeAlias04(): #{H[Int, Bool]} = #{
+    def testPolyTypeAlias04(): #{H[Int32, Bool]} = #{
         H(21, true). H(42, false).
     }
 
     @test
-    def testPolyTypeAlias05(): #{I[Bool, Int, String]} = #{
+    def testPolyTypeAlias05(): #{I[Bool, Int32, String]} = #{
         I(true, 21, "Hello"). I(false, 42, "World!").
     }
 
     @test
-    def testPolyTypeAlias06(): #{I[Int, String, Bool]} = #{
+    def testPolyTypeAlias06(): #{I[Int32, String, Bool]} = #{
         I(21, "Hello", true). I(42, "World!", false).
     }
 
     @test
-    def testPolyTypeAlias07(): #{G[Option[Int]]} = #{
+    def testPolyTypeAlias07(): #{G[Option[Int32]]} = #{
         G(None). G(Some(21)). G(Some(42)).
     }
 
     @test
-    def testPolyTypeAlias08(): #{G[Int], H[Bool, Int], I[Bool, Int, String]} = #{
+    def testPolyTypeAlias08(): #{G[Int32], H[Bool, Int32], I[Bool, Int32, String]} = #{
         G(1). G(2). G(3).
         H(true, 21). H(false, 42).
         I(true, 21, "Hello"). I(false, 42, "World!").
@@ -127,90 +127,6 @@ namespace Test/TypeAlias/Rel {
         A("x"). A("x"). A("x").
         B("x"). B("x"). B("x").
         C(1, 2, 3).
-    }
-
-    enum Option[t] {
-        case None,
-        case Some(t)
-    }
-
-    instance Eq[Option[a]] with [a : Eq] {
-        def eq(o1: Option[a], o2: Option[a]): Bool = match (o1, o2) {
-            case (None, None)           => true
-            case (Some(v1), Some(v2))   => v1 == v2
-            case _                      => false
-        }
-
-        def neq(xs: Option[a], ys: Option[a]): Bool = not (xs == ys)
-    }
-
-    instance Hash[Option[a]] with [a : Hash] {
-        def hash(o: Option[a]): Int = match o {
-            case None       => 1046527
-            case Some(x)    => 919 * Hash.hash(x)
-        }
-    }
-
-    instance ToString[Option[a]] with [a : ToString] {
-        def toString(o: Option[a]): String = match o {
-            case None       => "None"
-            case Some(x)    => "Some(${x})"
-        }
-    }
-
-    enum Result[t, e] {
-        case Ok(t),
-        case Err(e)
-    }
-
-
-    instance Eq[Result[t, e]] with [t : Eq, e : Eq] {
-        def eq(r1: Result[t, e], r2: Result[t, e]): Bool = match (r1, r2) {
-            case (Ok(v1), Ok(v2)) => v1 == v2
-            case (Err(w1), Err(w2)) => w1 == w2
-            case _ => false
-        }
-
-        def neq(r1: Result[t, e], r2: Result[t, e]): Bool = not (r1 == r2)
-    }
-
-    instance Hash[Result[t, e]] with [t : Hash, e : Hash] {
-        def hash(r: Result[t, e]): Int = match r {
-            case Ok(v)  => 5381 + 113 * Hash.hash(v)
-            case Err(v) => 5351 + 97 * Hash.hash(v)
-        }
-    }
-
-    instance ToString[Result[t, e]] with [t : ToString, e : ToString] {
-        def toString(r: Result[t, e]): String = ???
-    }
-
-    enum List[t] {
-        case Nil,
-        case Cons(t, List[t])
-    }
-
-    instance Eq[List[a]] with [a : Eq] {
-        def eq(xs: List[a], ys: List[a]): Bool = match (xs, ys) {
-            case (Nil, Nil) => true
-            case (x :: rs, y :: qs) => if (x != y) false else rs == qs
-            case _ => false
-        }
-        def neq(xs: List[a], ys: List[a]): Bool = not (xs == ys)
-    }
-
-    instance Hash[List[a]] with [a : Hash] {
-        def hash(xs: List[a]): Int =
-            foldLeft((acc, x) -> acc * 31 + Hash.hash(x), 37199, xs)
-    }
-
-    pub def foldLeft(f: (b, a) -> b & e, s: b, xs: List[a]): b & e = match xs {
-        case Nil => s
-        case x :: rs => foldLeft(f, f(s, x), rs)
-    }
-
-    instance ToString[List[a]] with [a : ToString] {
-        def toString(xs: List[a]): String = ???
     }
 
 }

@@ -9,3 +9,10 @@ target
 /*.flix
 /build
 /.gradle
+.metals
+.vscode
+.bloop
+crash_report_*.txt
+
+# local development files
+**/personal/**

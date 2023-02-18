@@ -17,162 +17,118 @@
 ///
 /// Represents a StringBuilder.
 ///
-opaque type StringBuilder = ##java.lang.StringBuilder
+enum StringBuilder[_: Region](##java.lang.StringBuilder)
+
+instance Newable[StringBuilder] {
+    pub def new(r: Region[r]): StringBuilder[r] \ Write(r) = StringBuilder.new(r)
+}
 
 namespace StringBuilder {
 
     ///
     /// Returns a new mutable StringBuilder.
     ///
-    pub def new(): StringBuilder & Impure =
-        import new java.lang.StringBuilder() as newStringBuilder;
+    pub def new(_: Region[r]): StringBuilder[r] \ Write(r) =
+        import new java.lang.StringBuilder(): ##java.lang.StringBuilder \ r as newStringBuilder;
         StringBuilder(newStringBuilder())
 
     ///
-    /// Append the StringBuilder `sb2` to the end of StringBuilder `sb1`.
+    /// Append `x` to the StringBuilder `sb`.
     ///
-    pub def append!(sb1: StringBuilder, sb2: StringBuilder): Unit & Impure =
-        import java.lang.StringBuilder.append(##java.lang.CharSequence);
-        let StringBuilder(msb1) = sb1;
-        let StringBuilder(msb2) = sb2;
-        let cs2 = msb2 as ##java.lang.CharSequence;
-        msb1.append(cs2);
+    pub def append!(x: a, sb: StringBuilder[r]): Unit \ Write(r) with ToString[a] =
+        let s = ToString.toString(x);
+        s `appendString!` sb;
         ()
 
     ///
     /// Append the String `s` to the StringBuilder `sb`.
     ///
-    pub def appendString!(sb: StringBuilder, s: String): Unit & Impure =
-        import java.lang.StringBuilder.append(String);
+    pub def appendString!(s: String, sb: StringBuilder[r]): Unit \ Write(r) =
+        import java.lang.StringBuilder.append(String): ##java.lang.StringBuilder \ r;
         let StringBuilder(msb) = sb;
-        msb.append(s);
-        ()
-
-    ///
-    /// Append the Char `c` to the StringBuilder `sb`.
-    ///
-    pub def appendChar!(sb: StringBuilder, c: Char): Unit & Impure =
-        import java.lang.StringBuilder.append(Char);
-        let StringBuilder(msb) = sb;
-        msb.append(c); 
-        ()
-
-    ///
-    /// Append the Int8 `i` to the StringBuilder `sb`.
-    ///
-    pub def appendInt8!(sb: StringBuilder, i: Int8): Unit & Impure =
-        sb.appendString!(Int8.toString(i));
-        ()
-
-    ///
-    /// Append the Int16 `i` to the StringBuilder `sb`.
-    ///
-    pub def appendInt16!(sb: StringBuilder, i: Int16): Unit & Impure =
-        sb.appendString!(Int16.toString(i));
-        ()
-
-    ///
-    /// Append the Int32 `i` to the StringBuilder `sb`.
-    ///
-    pub def appendInt32!(sb: StringBuilder, i: Int32): Unit & Impure =
-        import java.lang.StringBuilder.append(Int32);
-        let StringBuilder(msb) = sb;
-        msb.append(i);
-        ()
-
-    ///
-    /// Append the Int64 `i` to the StringBuilder `sb`.
-    ///
-    pub def appendInt64!(sb: StringBuilder, i: Int64): Unit & Impure =
-        import java.lang.StringBuilder.append(Int64);
-        let StringBuilder(msb) = sb;
-        msb.append(i);
-        ()
-
-    ///
-    /// Append the BigInt `i` to the StringBuilder `sb`.
-    ///
-    pub def appendBigInt!(sb: StringBuilder, i: BigInt): Unit & Impure =
-        sb.appendString!(BigInt.toString(i));
-        ()
-
-    ///
-    /// Append the Float32 `d` to the StringBuilder `sb`.
-    ///
-    pub def appendFloat32!(sb: StringBuilder, d: Float32): Unit & Impure =
-        import java.lang.StringBuilder.append(Float32);
-        let StringBuilder(msb) = sb;
-        msb.append(d);
-        ()
-
-    ///
-    /// Append the Float64 `d` to the StringBuilder `sb`.
-    ///
-    pub def appendFloat64!(sb: StringBuilder, d: Float64): Unit & Impure =
-        import java.lang.StringBuilder.append(Float64);
-        let StringBuilder(msb) = sb;
-        msb.append(d);
+        discard msb `append` s;
         ()
 
     ///
     /// Append the system line separator to the StringBuilder `sb`.
     ///
-    pub def appendLineSeparator!(sb: StringBuilder): Unit & Impure =
-        sb.appendString!(String.lineSeparator())
+    pub def appendLineSeparator!(sb: StringBuilder[r]): Unit \ Write(r) =
+        String.lineSeparator() `appendString!` sb
 
     ///
     /// Append the String `s` followed by the system line separator to the StringBuilder `sb`.
     ///
-    pub def appendLine!(sb: StringBuilder, s: String): Unit & Impure =
-        sb.appendString!(s);
-        sb.appendLineSeparator!()
+    pub def appendLine!(s: String, sb: StringBuilder[r]): Unit \ Write(r) =
+        s `appendString!` sb;
+        appendLineSeparator!(sb)
 
     ///
     /// Appends `f(x)` to the string builder `sb`.
     ///
-    pub def appendLineWith!(sb: StringBuilder, f: a -> String, x: a): Unit & Impure =
-        sb.appendString!(f(x));
-        sb.appendLineSeparator!()
+    pub def appendLineWith!(f: a -> String \ ef, x: a, sb: StringBuilder[r]): Unit \ { ef, Write(r) } =
+        f(x) `appendString!` sb;
+        appendLineSeparator!(sb)
 
     ///
     /// Appends each string in the array `a` to the string builder `sb`.
     ///
-    pub def appendLines!(sb: StringBuilder, a: Array[String]): Unit & Impure =
-        Array.foreach(appendLine!(sb), a)
+    pub def appendLines!(a: Array[String, r1], sb: StringBuilder[r2]): Unit \ { Read(r1), Write(r2) } =
+        Array.forEach(x -> appendLine!(x, sb), a)
+
+    ///
+    /// Appends `f(x)` for each x in the foldable collection `t` to the string builder `sb`.
+    ///
+    pub def appendLinesWith(f: a -> String & ef, t: t[a], sb: StringBuilder[r]): Unit \ { ef, Write(r) } with Foldable[t] =
+        Foldable.forEach(x -> appendLineWith!(f, x, sb), t)
 
     ///
     /// Appends `f(x)` for each x in array `a` to the string builder `sb`.
     ///
-    pub def appendLinesWith!(sb: StringBuilder, f: a -> String, a: Array[a]): Unit & Impure =
-        Array.foreach(appendLineWith!(sb, f), a)
+    pub def appendLinesWith!(f: a -> String \ ef, a: Array[a, r1], sb: StringBuilder[r2]): Unit \ { ef, Read(r1), Write(r2) } =
+        Array.forEach(x -> appendLineWith!(f, x, sb), a)
 
     ///
     /// Append the array of strings `a` separating each pair of string with `sep` to the StringBuilder `sb`.
     ///
-    pub def intercalate!(sb: StringBuilder, sep: String, a: Array[String]): Unit & Impure =
-        let append1! = (s,i) ->
+    pub def intercalate!(sep: String, a: Array[String, r1], sb: StringBuilder[r2]): Unit \ { Read(r1), Write(r2) } =
+        let append1! = (i, s) ->
             if (i > 0) {
-                appendString!(sb, sep);
-                appendString!(sb, s)
+                appendString!(sep, sb);
+                appendString!(s, sb)
             } else {
-                appendString!(sb, s)
+                appendString!(s, sb)
             };
-       Array.foreachWithIndex(append1!, a)
+       Array.forEachWithIndex(append1!, a)
+
+    ///
+    /// Returns an iterator over `sb`.
+    ///
+    pub def iterator(rc: Region[r1], sb: StringBuilder[r2]): Iterator[Char, r1 and r2, r1] \ { Read(r2), Write(r1) } =
+        import java.lang.StringBuilder.charAt(Int32): Char \ Read(r2);
+        let StringBuilder(msb) = sb;
+        Iterator.range(rc, 0, length(sb)) |> Iterator.map(i -> charAt(msb, i))
+
+    ///
+    /// Returns an iterator over `l` zipped with the indices of the elements.
+    ///
+    pub def enumerator(r1: Region[r1], sb: StringBuilder[r2]): Iterator[(Int32, Char), r1 and r2, r1] \ { Read(r2), Write(r1) } =
+        iterator(r1, sb) |> Iterator.zipWithIndex
 
     ///
     /// Return the length of the StringBuilder `sb`.
     ///
-    pub def length(sb: StringBuilder): Int32 & Impure =
-        import java.lang.StringBuilder.length();
+    pub def length(sb: StringBuilder[r]): Int32 \ Read(r) =
+        import java.lang.StringBuilder.length(): Int32 \ r;
         let StringBuilder(msb) = sb;
-        msb.length()
+        length(msb)
 
     ///
     /// Convert the StringBuilder `sb` to a string.
     ///
-    pub def toString(sb: StringBuilder): String & Impure =
-        import java.lang.StringBuilder.toString();
+    pub def toString(sb: StringBuilder[r]): String \ Read(r) =
+        import java.lang.StringBuilder.toString(): String \ r;
         let StringBuilder(msb) = sb;
-        msb.toString()
+        toString(msb)
 
 }
+

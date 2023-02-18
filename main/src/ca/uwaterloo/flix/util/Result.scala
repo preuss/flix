@@ -24,7 +24,7 @@ import scala.annotation.tailrec
   * @tparam T the type of the value.
   * @tparam E the type of the error.
   */
-sealed trait Result[T, E] {
+sealed trait Result[+T, E] {
 
   /**
     * Retrieves the value from `this` result.
@@ -58,6 +58,14 @@ sealed trait Result[T, E] {
   final def toValidation: Validation[T, E] = this match {
     case Result.Ok(t) => Validation.Success(t)
     case Result.Err(e) => Validation.Failure(LazyList(e))
+  }
+
+  /**
+    * Returns `this` result as an [[Option]].
+    */
+  final def toOption: Option[T] = this match {
+    case Result.Ok(t) => Some(t)
+    case Result.Err(_) => None
   }
 }
 

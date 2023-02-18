@@ -1,10 +1,11 @@
 package ca.uwaterloo.flix.language.phase.jvm
 
-import java.lang.reflect.Method
-
 import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.language.ast.FinalAst.Root
-import ca.uwaterloo.flix.util.{InternalCompilerException, Verbosity}
+import ca.uwaterloo.flix.language.ast.ErasedAst.Root
+import ca.uwaterloo.flix.language.ast.SourceLocation
+import ca.uwaterloo.flix.util.InternalCompilerException
+
+import java.lang.reflect.{InvocationTargetException, Method}
 
 /**
   * Loads all the generated classes into the JVM and decorates the AST.
@@ -13,8 +14,9 @@ object Bootstrap {
 
   /**
     * Loads all the generated classes into the JVM and decorates the AST.
+    * The main functions of `Main.class` is returned if it exists.
     */
-  def bootstrap(classes: Map[JvmName, JvmClass])(implicit flix: Flix, root: Root): Unit = {
+  def bootstrap(classes: Map[JvmName, JvmClass])(implicit flix: Flix, root: Root): Option[Array[String] => Unit] = {
     //
     // Load each class into the JVM in a fresh class loader.
     //
@@ -23,7 +25,7 @@ object Bootstrap {
     //
     // Print the number of loaded classes, if debugging and verbosity is enabled.
     //
-    if (flix.options.debug && flix.options.verbosity == Verbosity.Verbose) {
+    if (flix.options.debug) {
       Console.println(s"Loaded: ${loadedClasses.size} classes.")
     }
 
@@ -39,7 +41,7 @@ object Bootstrap {
       //
       // Decorate each defn in the ast with its method object.
       //
-      for ((sym, defn) <- root.defs; if JvmOps.nonLaw(defn)) {
+      for ((sym, defn) <- root.defs) {
         // Retrieve the namespace info of sym.
         val nsInfo = JvmOps.getNamespace(sym)
 
@@ -47,16 +49,16 @@ object Bootstrap {
         val nsJvmName = JvmOps.getNamespaceClassType(nsInfo).name
 
         // Retrieve the reflective class object.
-        val nsClass = loadedClasses.getOrElse(nsJvmName, throw InternalCompilerException(s"Unknown namespace: '$nsJvmName'."))
+        val nsClass = loadedClasses.getOrElse(nsJvmName, throw InternalCompilerException(s"Unknown namespace: '$nsJvmName'.", sym.loc))
 
         // Retrieve the method name of the symbol.
         val methodName = JvmOps.getDefMethodNameInNamespaceClass(sym)
 
         // Retrieve the method object.
         val method = allMethods.get(nsClass) match {
-          case None => throw InternalCompilerException(s"Class not found: '$nsClass'.")
+          case None => throw InternalCompilerException(s"Class not found: '$nsClass'.", sym.loc)
           case Some(m) => m.get(methodName) match {
-            case None => throw InternalCompilerException(s"Method not found: '$methodName'.")
+            case None => throw InternalCompilerException(s"Method not found: '$methodName'.", sym.loc)
             case Some(r) => r
           }
         }
@@ -64,7 +66,34 @@ object Bootstrap {
         // And finally assign the method object to the definition.
         defn.method = method
       }
+
+      if (shouldMainExist) {
+        val mainName = JvmOps.getMainClassType().name
+        val mainClass = loadedClasses.getOrElse(mainName, throw InternalCompilerException(s"Class not found: '${mainName.toInternalName}'.", SourceLocation.Unknown))
+        val mainMethods = allMethods.getOrElse(mainClass, throw InternalCompilerException(s"methods for '${mainName.toInternalName}' not found.", SourceLocation.Unknown))
+        val mainMethod = mainMethods.getOrElse("main", throw InternalCompilerException(s"Cannot find 'main' method of '${mainName.toInternalName}'", SourceLocation.Unknown))
+
+        // This is a specialized version of the link function in JvmBackend
+        def mainFunction(args: Array[String]): Unit = {
+          try {
+            // Call the method passing the argument array.
+            mainMethod.invoke(null, args)
+            ()
+          } catch {
+            case e: InvocationTargetException =>
+              // Rethrow the underlying exception.
+              throw e.getTargetException
+          }
+        }
+
+        Some(mainFunction)
+      } else None
     }
+  }
+
+  private def shouldMainExist(implicit root: Root): Boolean = {
+    // These two lookups match the condition that genMainClass has for generation.
+    root.entryPoint.flatMap(root.defs.get).isDefined
   }
 
   /**

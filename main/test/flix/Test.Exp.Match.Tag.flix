@@ -90,14 +90,9 @@ namespace Test/Exp/Match/Tag {
         case Some(Err(_)) => true
     }
 
-    enum Option[t] {
-        case None,
-        case Some(t)
+    @test
+    def testMatchTopLevel01(): Bool = match (Option.Some(1)) {
+        case Option.None    => false
+        case Option.Some(_) => true
     }
-
-    enum Result[t, e] {
-        case Ok(t),
-        case Err(e)
-    }
-
 }

@@ -17,8 +17,9 @@
 package ca.uwaterloo.flix.language.phase.jvm
 
 import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.language.ast.FinalAst.{Def, Root}
-import ca.uwaterloo.flix.language.ast.Symbol
+import ca.uwaterloo.flix.language.ast.ErasedAst.{Def, Root}
+import ca.uwaterloo.flix.language.ast.{MonoType, Symbol}
+import ca.uwaterloo.flix.util.InternalCompilerException
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes._
 
@@ -27,93 +28,111 @@ import org.objectweb.asm.Opcodes._
   */
 object GenMainClass {
 
-
   /**
-    * Returns the main class.
+    * Returns the main class if `root` has an entrypoint and `root.defs` has a
+    * corresponding method.
     */
   def gen()(implicit root: Root, flix: Flix): Map[JvmName, JvmClass] = getMain(root) match {
     case None => Map.empty
     case Some(defn) =>
+      checkMainType(defn)
+
       val jvmType = JvmOps.getMainClassType()
       val jvmName = jvmType.name
-      val retJvmType = JvmOps.getErasedJvmType(defn.tpe)
-      val bytecode = genByteCode(jvmType, retJvmType)
+      val bytecode = genByteCode(defn.sym, jvmType)
+
       Map(jvmName -> JvmClass(jvmName, bytecode))
   }
 
-  def genByteCode(jvmType: JvmType.Reference, retJvmType: JvmType)(implicit root: Root, flix: Flix): Array[Byte] = {
-    // class writer
-    val visitor = AsmOps.mkClassWriter()
-
-    // internal name of super
-    val superClass = JvmName.Object.toInternalName
-
-    // Initialize the visitor to create a class.
-    visitor.visit(AsmOps.JavaVersion, ACC_PUBLIC + ACC_FINAL, jvmType.name.toInternalName, null, superClass, null)
-
-    // Source of the class
-    visitor.visitSource(jvmType.name.toInternalName, null)
-
-    // Emit the code for the main method
-    compileMainMethod(visitor, jvmType, retJvmType)
-
-    visitor.visitEnd()
-    visitor.toByteArray
-  }
-
   /**
-    * Emits code for the main method in the main class. The emitted (byte)code should satisfy the following signature for the method:
-    * public static void main(String[])
-    *
-    * The method itself needs simply invoke the m_main method which is in the root namespace.
-    *
-    * The emitted code for the method should correspond to:
-    *
-    * Ns.m_main((Object)null);
+    * Throws `InternalCompilerException` if the type  of `defn` is not `Unit -> Unit`.
     */
-  def compileMainMethod(visitor: ClassWriter, jvmType: JvmType.Reference, retJvmType: JvmType)(implicit root: Root, flix: Flix): Unit = {
-
-    //Get the (argument) descriptor, since the main argument is of type String[], we need to get it's corresponding descriptor
-    val argumentDescriptor = AsmOps.getArrayType(JvmType.String)
-
-    //Get the (result) descriptor, since main method returns void, we need to get the void type descriptor
-    val resultDescriptor = JvmType.Void.toDescriptor
-
-    //Emit the main method signature
-    val main = visitor.visitMethod(ACC_PUBLIC + ACC_STATIC, "main",s"($argumentDescriptor)$resultDescriptor", null, null)
-
-    main.visitCode()
-
-    //Get the root namespace in order to get the class type when invoking m_main
-    val ns = JvmOps.getNamespace(Symbol.Main)
-
-    // Call Ns.m_main(args)
-
-    // Push the args array on the stack.
-    main.visitVarInsn(ALOAD, 0)
-
-    //Invoke m_main
-    main.visitMethodInsn(INVOKESTATIC, JvmOps.getNamespaceClassType(ns).name.toInternalName, "m_main",
-      AsmOps.getMethodDescriptor(List(/* TODO: Should be string array */ JvmType.Object), JvmType.PrimInt), false)
-
-    main.visitInsn(RETURN)
-    main.visitMaxs(1,1)
-    main.visitEnd()
+  private def checkMainType(defn: Def): Unit = defn.tpe match {
+    case MonoType.Arrow(List(MonoType.Unit), MonoType.Unit) => ()
+    case other => throw InternalCompilerException(s"Entrypoint function should have type Unit -> Unit not '$other'", defn.loc)
   }
 
   /**
     * Optionally returns the main definition in the given AST `root`.
     */
   private def getMain(root: Root): Option[Def] = {
-    // The main function must be called `main` and occur in the root namespace.
-    val sym = Symbol.Main
-
-    // Check if the main function exists.
-    root.defs.get(sym) flatMap {
-      case defn =>
-        // The main function must take zero arguments.
-        Some(defn)
+    root.entryPoint match {
+      case None => None
+      case Some(sym) => root.defs.get(sym)
     }
+  }
+
+  private def genByteCode(sym: Symbol.DefnSym, jvmType: JvmType.Reference)(implicit root: Root, flix: Flix): Array[Byte] = {
+    // class writer
+    val visitor = AsmOps.mkClassWriter()
+
+    // internal name of super
+    val superClass = BackendObjType.JavaObject.jvmName.toInternalName
+
+    // Initialize the visitor to create a class.
+    visitor.visit(AsmOps.JavaVersion, ACC_PUBLIC + ACC_FINAL,
+      jvmType.name.toInternalName, null, superClass, null)
+
+    // Source of the class
+    visitor.visitSource(jvmType.name.toInternalName, null)
+
+    // Emit the code for the main method
+    compileMainMethod(sym, visitor)
+
+    visitor.visitEnd()
+    visitor.toByteArray
+  }
+
+  /**
+    * Emits code for the main method in the main class. The emitted (byte)code
+    * should satisfy the following signature for the method:
+    * `public static void main(String[])`
+    *
+    * The method itself needs simply invoke the m_entrypoint method which is in
+    * the root namespace.
+    *
+    * The emitted code for the method should correspond to:
+    *
+    * `public static void main(String[] args) = {`
+    *
+    * `dev.flix.runtime.Global.setArgs(args);`
+    *
+    * `Ns.m_entrypoint(Unit.INSTANCE);`
+    *
+    * `}`
+    */
+  private def compileMainMethod(sym: Symbol.DefnSym, visitor: ClassWriter)(implicit root: Root, flix: Flix): Unit = {
+    // The required java main signature `Array[String] -> Void`.
+    val javaMainDescriptor = s"(${AsmOps.getArrayType(JvmType.String)})${JvmType.Void.toDescriptor}"
+    // `public static void main(String[] args)`.
+    val main = visitor.visitMethod(ACC_PUBLIC + ACC_STATIC, "main",
+      javaMainDescriptor, null, null)
+
+    main.visitCode()
+
+    // Push the args array on the stack.
+    main.visitVarInsn(ALOAD, 0)
+
+    // Save the args in `dev.flix.runtime.Global.setArgs(..)`.
+    val setArgsDescriptor = s"(${AsmOps.getArrayType(JvmType.String)})${JvmType.Void.toDescriptor}"
+    main.visitMethodInsn(INVOKESTATIC, BackendObjType.Global.jvmName.toInternalName,
+      BackendObjType.Global.SetArgsMethod.name, setArgsDescriptor, false)
+
+    // Push `Unit` on the stack.
+    main.visitFieldInsn(GETSTATIC, BackendObjType.Unit.jvmName.toInternalName,
+      BackendObjType.Unit.InstanceField.name, BackendObjType.Unit.jvmName.toDescriptor)
+
+    // Call the `Ns.m_entrypoint` method.
+    val nsClassName = JvmOps.getNamespaceClassType(JvmOps.getNamespace(sym)).name.toInternalName
+    val mainMethodName = JvmOps.getDefMethodNameInNamespaceClass(sym)
+    val erasedUnit = JvmOps.getErasedJvmType(MonoType.Unit)
+    val mainDescriptor = AsmOps.getMethodDescriptor(List(erasedUnit), erasedUnit)
+    main.visitMethodInsn(INVOKESTATIC, nsClassName, mainMethodName, mainDescriptor, false)
+    // The return value is ignored.
+
+    main.visitInsn(RETURN)
+    main.visitMaxs(1, 1)
+    main.visitEnd()
   }
 
 }

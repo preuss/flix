@@ -16,15 +16,18 @@
 package ca.uwaterloo.flix.api.lsp
 
 import ca.uwaterloo.flix.language.ast.TypedAst._
-import ca.uwaterloo.flix.language.ast.{Name, SourceLocation, Symbol, Type, TypeConstructor, TypedAst}
+import ca.uwaterloo.flix.language.ast.{Name, SourceLocation, Symbol, Type, TypedAst}
 import ca.uwaterloo.flix.util.collection.MultiMap
+
+import scala.collection.mutable.ArrayBuffer
 
 object Index {
   /**
     * Represents the empty reverse index.
     */
   val empty: Index = Index(Map.empty, MultiMap.empty, MultiMap.empty, MultiMap.empty, MultiMap.empty, MultiMap.empty,
-    MultiMap.empty, MultiMap.empty, MultiMap.empty, MultiMap.empty, MultiMap.empty)
+    MultiMap.empty, MultiMap.empty, MultiMap.empty, MultiMap.empty, MultiMap.empty, MultiMap.empty, MultiMap.empty,
+    MultiMap.empty, MultiMap.empty)
 
   /**
     * Returns an index for the given `class0`.
@@ -52,6 +55,11 @@ object Index {
   def occurrenceOf(enum0: Enum): Index = empty + Entity.Enum(enum0)
 
   /**
+    * Returns an index for the given `alias0`.
+    */
+  def occurrenceOf(alias0: TypeAlias): Index = empty + Entity.TypeAlias(alias0)
+
+  /**
     * Returns an index for the given `exp0`.
     */
   def occurrenceOf(exp0: Expression): Index = empty + Entity.Exp(exp0)
@@ -74,17 +82,32 @@ object Index {
   /**
     * Returns an index for the given atom `a0`.
     */
-  def occurrenceOf(pred: Name.Pred): Index = empty + Entity.Pred(pred)
+  def occurrenceOf(pred: Name.Pred, tpe0: Type): Index = empty + Entity.Pred(pred, tpe0)
 
   /**
-    * Returns an index for the given `tpe0`.
+    * Returns an index for the given type `t`.
     */
-  def occurrenceOf(tc: TypeConstructor, loc: SourceLocation): Index = empty + Entity.TypeCon(tc, loc)
+  def occurrenceOf(t: Type): Index = empty + Entity.Type(t)
 
   /**
     * Returns an index for the given local variable `sym0`.
     */
   def occurrenceOf(sym: Symbol.VarSym, tpe0: Type): Index = empty + Entity.LocalVar(sym, tpe0)
+
+  /**
+    * Returns an index for the given local variable `sym0`.
+    */
+  def occurrenceOf(sym: Symbol.KindedTypeVarSym): Index = empty + Entity.TypeVar(sym)
+
+  /**
+    * Returns an index for the given effect `sym`.
+    */
+  def occurrenceOf(eff: Effect): Index = empty + Entity.Effect(eff)
+
+  /**
+    * Returns an index for the given effect operation `sym`.
+    */
+  def occurrenceOf(op: Op): Index = empty + Entity.Op(op)
 
   /**
     * Returns an index with the symbol 'sym' used at location 'loc'.
@@ -94,12 +117,14 @@ object Index {
   /**
     * Returns an index with the symbol 'sym' used at location 'loc'.
     */
-  def useOf(sym: Symbol.SigSym, loc: SourceLocation): Index = Index.empty.copy(sigUses = MultiMap.singleton(sym, loc))
+  def useOf(sym: Symbol.SigSym, loc: SourceLocation, parent: Entity): Index =
+    Index.empty.copy(sigUses = MultiMap.singleton(sym, loc)) + Entity.SigUse(sym, loc, parent)
 
   /**
     * Returns an index with the symbol `sym` used at location `loc.`
     */
-  def useOf(sym: Symbol.DefnSym, loc: SourceLocation): Index = Index.empty.copy(defUses = MultiMap.singleton(sym, loc))
+  def useOf(sym: Symbol.DefnSym, loc: SourceLocation, parent: Entity): Index =
+    Index.empty.copy(defUses = MultiMap.singleton(sym, loc)) + Entity.DefUse(sym, loc, parent)
 
   /**
     * Returns an index with the symbol `sym` used at location `loc.`
@@ -107,14 +132,35 @@ object Index {
   def useOf(sym: Symbol.EnumSym, loc: SourceLocation): Index = Index.empty.copy(enumUses = MultiMap.singleton(sym, loc))
 
   /**
-    * Returns an index with the symbol `sym` and `tag` used at location `loc.`
+    * Returns an index with the symbol `sym` used at location `loc.`
     */
-  def useOf(sym: Symbol.EnumSym, tag: Name.Tag): Index = Index.empty.copy(tagUses = MultiMap.singleton((sym, tag), tag.loc))
+  def useOf(sym: Symbol.CaseSym, loc: SourceLocation, parent: Entity): Index = Index.empty.copy(tagUses = MultiMap.singleton(sym, loc)) + Entity.CaseUse(sym, loc, parent)
 
   /**
     * Returns an index with the symbol `sym` used at location `loc.`
     */
-  def useOf(sym: Symbol.VarSym, loc: SourceLocation): Index = Index.empty.copy(varUses = MultiMap.singleton(sym, loc))
+  def useOf(sym: Symbol.TypeAliasSym, loc: SourceLocation): Index = Index.empty.copy(aliasUses = MultiMap.singleton(sym, loc))
+
+  /**
+    * Returns an index with the symbol `sym` used at location `loc.`
+    */
+  def useOf(sym: Symbol.VarSym, loc: SourceLocation, parent: Entity): Index =
+    Index.empty.copy(varUses = MultiMap.singleton(sym, loc)) + Entity.VarUse(sym, loc, parent)
+
+  /**
+    * Returns an index with the symbol `sym` used at location `loc.`
+    */
+  def useOf(sym: Symbol.KindedTypeVarSym, loc: SourceLocation): Index = Index.empty.copy(tvarUses = MultiMap.singleton(sym, loc))
+
+  /**
+    * Returns an index with the symbol `sym` used at location `loc.`
+    */
+  def useOf(sym: Symbol.EffectSym, loc: SourceLocation): Index = Index.empty.copy(effUses = MultiMap.singleton(sym, loc))
+
+  /**
+    * Returns an index with the symbol `sym` used at location `loc.`
+    */
+  def useOf(sym: Symbol.OpSym, loc: SourceLocation, parent: Entity): Index = Index.empty.copy(opUses = MultiMap.singleton(sym, loc)) + Entity.OpUse(sym, loc, parent)
 
   /**
     * Returns an index with a def of the given `field`.
@@ -136,6 +182,15 @@ object Index {
     */
   def useOf(pred: Name.Pred): Index = Index.empty.copy(predUses = MultiMap.singleton(pred, pred.loc))
 
+  /**
+    * Applies `f` to each element in `xs` and merges the result into a single index.
+    */
+  def traverse[T](xs: Iterable[T])(f: T => Index): Index = {
+    xs.foldLeft(Index.empty) {
+      case (acc, idx) => acc ++ f(idx)
+    }
+  }
+
 }
 
 /**
@@ -146,12 +201,17 @@ case class Index(m: Map[(String, Int), List[Entity]],
                  sigUses: MultiMap[Symbol.SigSym, SourceLocation],
                  defUses: MultiMap[Symbol.DefnSym, SourceLocation],
                  enumUses: MultiMap[Symbol.EnumSym, SourceLocation],
-                 tagUses: MultiMap[(Symbol.EnumSym, Name.Tag), SourceLocation],
+                 aliasUses: MultiMap[Symbol.TypeAliasSym, SourceLocation],
+                 tagUses: MultiMap[Symbol.CaseSym, SourceLocation],
                  fieldDefs: MultiMap[Name.Field, SourceLocation],
                  fieldUses: MultiMap[Name.Field, SourceLocation],
                  predDefs: MultiMap[Name.Pred, SourceLocation],
                  predUses: MultiMap[Name.Pred, SourceLocation],
-                 varUses: MultiMap[Symbol.VarSym, SourceLocation]) {
+                 varUses: MultiMap[Symbol.VarSym, SourceLocation],
+                 tvarUses: MultiMap[Symbol.KindedTypeVarSym, SourceLocation],
+                 effUses: MultiMap[Symbol.EffectSym, SourceLocation],
+                 opUses: MultiMap[Symbol.OpSym, SourceLocation]
+                ) {
 
   /**
     * Optionally returns the expression in the document at the given `uri` at the given position `pos`.
@@ -167,14 +227,51 @@ case class Index(m: Map[(String, Int), List[Entity]],
         // Step 1: Compute all whole range overlap with the given position.
         val filtered = candidates.filter(e => e.loc.beginCol <= pos.character && pos.character <= e.loc.endCol)
 
-        // Step 2: Sort the expressions by their span (i.e. their length).
-        val sorted = filtered.sortBy(e => span(e.loc))
+        // Step 2: Get the min expression,
+        // primarily by the span (i.e. the length)
+        // and secondarily by the precision level of the entity
+        filtered.minOption(
+          Ordering.by((e: Entity) => span(e.loc))
+            .orElse(Ordering.by((e: Entity) => e.precision).reverse))
+    }
+  }
 
-        // Print all candidates.
-        // println(sorted.map(_.loc.format).mkString("\n"))
+  /**
+    * Returns the expressions in the document at the given `uri` in the given range `range`.
+    */
+  def queryByRange(uri: String, range: Range): List[Entity] = {
+    (range.start.line to range.end.line).flatMap { line =>
+      m.getOrElse((uri, line), Nil)
+    }.filter { entity => entity.isInRange(range) }.toList
+  }
 
-        // Step 3: Return the candidate with the smallest span.
-        sorted.headOption
+
+  /**
+    * Returns all entities in the document at the given `uri`.
+    */
+  def query(uri: String): Iterable[Entity] = {
+    val res = new ArrayBuffer[Entity]()
+    for (((entitiesUri, _), entities) <- m) {
+      if (entitiesUri == uri) {
+        res.addAll(entities)
+      }
+    }
+    res
+  }
+
+  /**
+    * Returns all entities in the document at the given `uri` which appear at most
+    * `beforeLine`s before `queryLine` and at most `afterLine`s after `queryLine`.
+    */
+  def queryWithRange(uri: String, queryLine: Int, beforeLine: Int, afterLine: Int): Iterable[Entity] = {
+    query(uri).filter {
+      case entity =>
+        val currentLine = entity.loc.beginLine
+        val delta = queryLine - currentLine
+        if (delta < 0)
+          (-delta) < beforeLine
+        else
+          delta < afterLine
     }
   }
 
@@ -199,14 +296,34 @@ case class Index(m: Map[(String, Int), List[Entity]],
   def usesOf(sym: Symbol.EnumSym): Set[SourceLocation] = enumUses(sym)
 
   /**
+    * Returns all uses of the given symbol `sym`.
+    */
+  def usesOf(sym: Symbol.TypeAliasSym): Set[SourceLocation] = aliasUses(sym)
+
+  /**
     * Returns all uses of the given symbol `sym` and `tag`.
     */
-  def usesOf(sym: Symbol.EnumSym, tag: Name.Tag): Set[SourceLocation] = tagUses((sym, tag))
+  def usesOf(sym: Symbol.CaseSym): Set[SourceLocation] = tagUses(sym)
 
   /**
     * Returns all uses of the given symbol `sym`.
     */
   def usesOf(sym: Symbol.VarSym): Set[SourceLocation] = varUses(sym)
+
+  /**
+    * Returns all uses of the given symbol `sym`.
+    */
+  def usesOf(sym: Symbol.KindedTypeVarSym): Set[SourceLocation] = tvarUses(sym)
+
+  /**
+    * Returns all uses of the given symbol `sym`.
+    */
+  def usesOf(sym: Symbol.EffectSym): Set[SourceLocation] = effUses(sym)
+
+  /**
+    * Returns all uses of the given symbol `sym`.
+    */
+  def usesOf(sym: Symbol.OpSym): Set[SourceLocation] = opUses(sym)
 
   /**
     * Returns all defs of the given `field`.
@@ -232,6 +349,11 @@ case class Index(m: Map[(String, Int), List[Entity]],
     * Adds the given entity `exp0` to `this` index.
     */
   private def +(entity: Entity): Index = {
+    // Do not index synthetic source locations.
+    if (entity.loc.isSynthetic) {
+      return this
+    }
+
     // Compute the uri, line, and column of the expression.
     val uri = entity.loc.source.name
     val beginLine = entity.loc.beginLine
@@ -263,12 +385,16 @@ case class Index(m: Map[(String, Int), List[Entity]],
       this.sigUses ++ that.sigUses,
       this.defUses ++ that.defUses,
       this.enumUses ++ that.enumUses,
+      this.aliasUses ++ that.aliasUses,
       this.tagUses ++ that.tagUses,
       this.fieldDefs ++ that.fieldDefs,
       this.fieldUses ++ that.fieldUses,
       this.predDefs ++ that.predDefs,
       this.predUses ++ that.predUses,
-      this.varUses ++ that.varUses
+      this.varUses ++ that.varUses,
+      this.tvarUses ++ that.tvarUses,
+      this.effUses ++ that.effUses,
+      this.opUses ++ that.opUses
     )
   }
 

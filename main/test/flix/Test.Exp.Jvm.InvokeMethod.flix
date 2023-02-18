@@ -1,28 +1,51 @@
 namespace Test/Exp/Jvm/InvokeMethod {
 
     @test
-    def testInvokeMethod01(): Bool & Impure =
-        import java.lang.String.toLowerCase();
+    def testInvokeMethod01(): Bool \ IO =
+        import java.lang.String.toLowerCase(): String \ IO;
         toLowerCase("HELLO WORLD") == "hello world"
 
     @test
-    def testInvokeMethod02(): Bool & Impure =
-        import java.lang.String.toUpperCase();
+    def testInvokeMethod02(): Bool \ IO =
+        import java.lang.String.toUpperCase(): String \ IO;
         toUpperCase("hello world") == "HELLO WORLD"
 
     @test
-    def testInvokeMethod03(): Bool & Impure =
-        import java.lang.String.length();
+    def testInvokeMethod03(): Bool \ IO =
+        import java.lang.String.length(): Int32 \ IO;
         length("hello world") == 11
 
     @test
-    def testInvokeMethod04(): Bool & Impure =
-        import java.lang.String.indexOf(String);
+    def testInvokeMethod04(): Bool \ IO =
+        import java.lang.String.indexOf(String): Int32 \ IO;
         indexOf("hello world", "world") == 6
 
     @test
-    def testInvokeMethod05(): Bool & Impure =
-        import java.lang.String.replaceAll(String, String);
+    def testInvokeMethod05(): Bool \ IO =
+        import java.lang.String.replaceAll(String, String): String \ IO;
         replaceAll("hello world", "hello", "goodbye") == "goodbye world"
 
+    type alias MyAliasedString = ##java.lang.String
+
+    @test
+    def testInvokeMethod06(): Bool \ IO =
+        import java.lang.String.toUpperCase(): MyAliasedString \ IO;
+        toUpperCase("hello world") == "HELLO WORLD"
+
+    @test
+    def testInvokePureMethod01(): Bool =
+        import java.lang.String.toLowerCase(): String \ {};
+        toLowerCase("HELLO WORLD") == "hello world"
+
+    @test
+    def testInvokeObjectMethod01(): ##java.lang.String \ IO =
+        import java.lang.String.toLowerCase(): ##java.lang.String \ IO;
+        toLowerCase("HELLO WORLD")
+
+    @test
+    def testInvokeInheritedMethod01(): Bool \ IO =
+        import new dev.flix.test.TestClassWithInheritedMethod(): ##dev.flix.test.TestClassWithInheritedMethod as newObj;
+        import dev.flix.test.TestClassWithInheritedMethod.concreteMethod(String): String \ {};
+        let obj = newObj();
+        concreteMethod(obj, "bar") == "foobar"
 }

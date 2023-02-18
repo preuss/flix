@@ -1,0 +1,76 @@
+name: Community Build
+
+on: [pull_request]
+
+permissions:
+  contents: read
+
+# Cancel previous runs if the PR is updated
+concurrency:
+  cancel-in-progress: true
+  group: community-build-${{ github.ref }}
+
+jobs:
+  # Build the JAR once for all the community builds
+  build-jar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v2
+      - name: Set up Java
+        uses: actions/setup-java@v1
+        with:
+          java-version: 17
+      - name: Build Flix JAR
+        run: ./gradlew jar
+      - name: Upload Flix JAR
+        uses: actions/upload-artifact@v3
+        with:
+          name: flix-jar
+          path: build/libs/flix.jar
+
+  # Spawn a separate job per community build
+  community-build:
+    needs: build-jar
+    strategy:
+      # collect all the failures
+      fail-fast: false
+      # run them one at a time
+      max-parallel: 1
+      matrix:
+        repo:
+          - "magnus-madsen/helloworld"
+          - "mlutze/fcwg"
+          - "JonathanStarup/Flix-ANSI-Terminal"
+          - "mlutze/flix-json"
+          - "jaschdoc/flix-parsers"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Java
+        uses: actions/setup-java@v1
+        with:
+          java-version: 17
+      - name: Download Flix JAR
+        uses: actions/download-artifact@v3
+        with:
+          name: flix-jar
+      - name: Initialize Flix Package
+        run: |
+          java -jar flix.jar init
+          
+          # Remove example code to avoid conflicts.
+          rm src/Main.flix
+          rm test/TestMain.flix
+      - name: Download Project Package
+        uses: robinraju/release-downloader@v1.7
+        with: 
+          repository: ${{ matrix.repo }}
+          latest: true
+          fileName: "*.fpkg"
+          out-file-path: lib/${{ matrix.repo }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build community project
+        timeout-minutes: 10
+        run: |
+          # Build the project.
+          java -jar flix.jar build

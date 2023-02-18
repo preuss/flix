@@ -25,6 +25,10 @@ namespace Test/Exp/Lazy {
         lazy 12.34f64
 
     @test
+    def testBigDecimalLazy01(): Lazy[BigDecimal] =
+        lazy 12.34ff
+
+    @test
     def testInt8Lazy01(): Lazy[Int8] =
         lazy 12i8
 
@@ -49,62 +53,68 @@ namespace Test/Exp/Lazy {
         lazy "string"
 
     @test
-    def testArrayOfIntLazy01(): Lazy[Array[Int]] & Impure =
-        let array = [1, 2];
-        lazy array
+    def testArrayOfIntLazy01(): Unit = region r {
+        discard {
+            let array = Array#{1, 2} @ r;
+            lazy array
+        }
+    }
 
     @test
-    def testArrayOfStringLazy01(): Lazy[Array[String]] & Impure =
-        let array = ["str", "str2"];
-        lazy array
+    def testArrayOfStringLazy01(): Unit = region r {
+        discard {
+            let array = Array#{"str", "str2"} @ r;
+            lazy array
+        }
+    }
 
     @test
     def testTupleLazy01(): Lazy[(String, String)] =
         lazy ("str", "str2")
 
     @test
-    def testNestedLazy01(): Lazy[Lazy[Int]] =
+    def testNestedLazy01(): Lazy[Lazy[Int32]] =
         lazy (lazy 123)
 
     @test
-    def testNestedLazy02(): Lazy[Int -> Lazy[String]] =
+    def testNestedLazy02(): Lazy[Int32 -> Lazy[String]] =
         lazy (x -> if (x < 0) lazy "neg" else lazy "pos")
 
     @test
-    def testNestedLazy03(): Poly[Lazy[Int], Lazy[String]] =
-        Both(lazy 2, lazy "2")
+    def testNestedLazy03(): Poly[Lazy[Int32], Lazy[String]] =
+        Poly.Both(lazy 2, lazy "2")
 
     @test
-    def testNestedLazy04(): Poly[Lazy[Int], Lazy[Int]] =
+    def testNestedLazy04(): Poly[Lazy[Int32], Lazy[Int32]] =
         let x = lazy 15;
-        Both(x, x)
+        Poly.Both(x, x)
 
     @test
-    def testNestedLazy05(): Lazy[Poly[Lazy[Int], String]] =
-        lazy (This(lazy 5))
+    def testNestedLazy05(): Lazy[Poly[Lazy[Int32], String]] =
+        lazy (Poly.This(lazy 5))
 
     @test
     def testNestedEnumLazy01(): Lazy[Card] =
-        lazy Card(Hearts, N(4))
+        lazy Card.Card(Suit.Hearts, Rank.N(4))
 
     @test
-    def testPolyLazy01(): Lazy[Poly[Int, String]] =
-        lazy This(123)
+    def testPolyLazy01(): Lazy[Poly[Int32, String]] =
+        lazy Poly.This(123)
 
     @test
     def testPolyLazy02(): Lazy[Poly[String, String]] =
-        lazy That("str")
+        lazy Poly.That("str")
 
     @test
-    def testPolyLazy03(): Lazy[Poly[String, Int]] =
-        lazy Both("str", 123)
+    def testPolyLazy03(): Lazy[Poly[String, Int32]] =
+        lazy Poly.Both("str", 123)
 
     pub enum Suit {
         case Hearts, Diamonds, Clubs, Spades
     }
 
     pub enum Rank {
-        case N(Int), Jack, Queen, King, Ace
+        case N(Int32), Jack, Queen, King, Ace
     }
 
     pub enum Card {

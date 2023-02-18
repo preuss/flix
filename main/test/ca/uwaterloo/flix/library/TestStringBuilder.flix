@@ -16,508 +16,629 @@
 
 namespace TestStringBuilder {
 
-/////////////////////////////////////////////////////////////////////////////
-// new                                                                     //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def new01(): StringBuilder & Impure = StringBuilder.new()
+    /////////////////////////////////////////////////////////////////////////////
+    // new                                                                     //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def new01(): StringBuilder[Static] \ IO =
+        StringBuilder.new(Static) // Must be Impure, otherwise the StringBuilder would escape its region
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // appendString!                                                           //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def appendString01!(): Bool = region r {
+        let sb = new StringBuilder(r);
+        StringBuilder.appendString!("hello", sb);
+        StringBuilder.toString(sb) == "hello"
+    }
+
+    @test
+    def appendString02!(): Bool = region r {
+        let sb = new StringBuilder(r);
+        StringBuilder.appendString!("hello", sb);
+        StringBuilder.appendString!("!", sb);
+        StringBuilder.toString(sb) == "hello!"
+    }
+
+    @test
+    def appendString03!(): Bool = region r {
+        let sb = new StringBuilder(r);
+        StringBuilder.appendString!("hello", sb);
+        StringBuilder.appendString!(" ", sb);
+        StringBuilder.appendString!("world!", sb);
+        StringBuilder.toString(sb) == "hello world!"
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // append! (Char)                                                          //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def appendChar01!(): Bool = region r {
+        let sb = new StringBuilder(r);
+        StringBuilder.append!('A', sb);
+        StringBuilder.toString(sb) == "A"
+    }
+
+    @test
+    def appendChar02!(): Bool = region r {
+        let sb = new StringBuilder(r);
+        StringBuilder.append!('A', sb);
+        StringBuilder.append!('B', sb);
+        StringBuilder.toString(sb) == "AB"
+    }
+
+    @test
+    def appendChar03!(): Bool = region r {
+        let sb = new StringBuilder(r);
+        StringBuilder.append!('A', sb);
+        StringBuilder.append!('B', sb);
+        StringBuilder.append!('C', sb);
+        StringBuilder.toString(sb) == "ABC"
+    }
+
 
 /////////////////////////////////////////////////////////////////////////////
-// append!                                                                 //
-/////////////////////////////////////////////////////////////////////////////
-@test 
-def append01!(): Bool & Impure =
-    let sb1 = StringBuilder.new();
-    let sb2 = StringBuilder.new();
-    StringBuilder.append!(sb1, sb2);
-    StringBuilder.toString(sb1) == ""
-
-@test 
-def append02!(): Bool & Impure =
-    let sb1 = StringBuilder.new();
-    let sb2 = StringBuilder.new();
-    StringBuilder.appendString!(sb1, "Hello");
-    StringBuilder.append!(sb1, sb2);
-    StringBuilder.toString(sb1) == "Hello"
-
-@test 
-def append03!(): Bool & Impure =
-    let sb1 = StringBuilder.new();
-    let sb2 = StringBuilder.new();
-    StringBuilder.appendString!(sb2, "World!");
-    StringBuilder.append!(sb1, sb2);
-    StringBuilder.toString(sb1) == "World!"
-
-@test 
-def append04!(): Bool & Impure =
-    let sb1 = StringBuilder.new();
-    let sb2 = StringBuilder.new();
-    StringBuilder.appendString!(sb1, "Hello");
-    StringBuilder.appendString!(sb2, " World!");
-    StringBuilder.append!(sb1, sb2);
-    StringBuilder.toString(sb1) == "Hello World!"
-
-/////////////////////////////////////////////////////////////////////////////
-// appendString!                                                           //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def appendString01!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendString!(sb, "hello");
-    StringBuilder.toString(sb) == "hello"
-
-@test
-def appendString02!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendString!(sb, "hello");
-    StringBuilder.appendString!(sb, "!");
-    StringBuilder.toString(sb) == "hello!"
-
-@test
-def appendString03!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendString!(sb, "hello");
-    StringBuilder.appendString!(sb, " ");
-    StringBuilder.appendString!(sb, "world!");
-    StringBuilder.toString(sb) == "hello world!"
-
-/////////////////////////////////////////////////////////////////////////////
-// appendChar!                                                             //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def appendChar01!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendChar!(sb, 'A');
-    StringBuilder.toString(sb) == "A"
-
-@test
-def appendChar02!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendChar!(sb, 'A');
-    StringBuilder.appendChar!(sb, 'B');
-    StringBuilder.toString(sb) == "AB"
-
-@test
-def appendChar03!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendChar!(sb, 'A');
-    StringBuilder.appendChar!(sb, 'B');
-    StringBuilder.appendChar!(sb, 'C');
-    StringBuilder.toString(sb) == "ABC"
-
-/////////////////////////////////////////////////////////////////////////////
-// appendInt8!                                                             //
+// append! (Int8)                                                          //
 /////////////////////////////////////////////////////////////////////////////
 @test
-def appendInt801!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt8!(sb, 0i8);
+def appendInt801!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(0i8, sb);
     StringBuilder.toString(sb) == "0"
+}
 
 @test
-def appendInt802!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt8!(sb, 1i8);
+def appendInt802!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(1i8, sb);
     StringBuilder.toString(sb) == "1"
+}
 
 @test
-def appendInt803!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt8!(sb, -1i8);
+def appendInt803!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(-1i8, sb);
     StringBuilder.toString(sb) == "-1"
+}
 
 @test
-def appendInt804!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt8!(sb, 127i8);
+def appendInt804!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(127i8, sb);
     StringBuilder.toString(sb) == "127"
+}
 
 @test
-def appendInt805!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt8!(sb, -127i8);
+def appendInt805!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(-127i8, sb);
     StringBuilder.toString(sb) == "-127"
+}
 
 /////////////////////////////////////////////////////////////////////////////
-// appendInt16!                                                            //
+// append! (Int16)                                                         //
 /////////////////////////////////////////////////////////////////////////////
+
 @test
-def appendInt1601!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt16!(sb, 0i16);
+def appendInt1601!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(0i16, sb);
     StringBuilder.toString(sb) == "0"
+}
 
 @test
-def appendInt1602!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt16!(sb, 1i16);
+def appendInt1602!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(1i16, sb);
     StringBuilder.toString(sb) == "1"
+}
 
 @test
-def appendInt1603!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt16!(sb, -1i16);
+def appendInt1603!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(-1i16, sb);
     StringBuilder.toString(sb) == "-1"
+}
 
 /////////////////////////////////////////////////////////////////////////////
-// appendInt32!                                                            //
+// append! (Int32)                                                         //
 /////////////////////////////////////////////////////////////////////////////
+
 @test
-def appendInt3201!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt32!(sb, 0);
+def appendInt3201!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(0, sb);
     StringBuilder.toString(sb) == "0"
+}
 
 @test
-def appendInt3202!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt32!(sb, 1);
+def appendInt3202!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(1, sb);
     StringBuilder.toString(sb) == "1"
+}
 
 @test
-def appendInt3203!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt32!(sb, -1);
+def appendInt3203!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(-1, sb);
     StringBuilder.toString(sb) == "-1"
+}
 
 /////////////////////////////////////////////////////////////////////////////
-// appendInt64!                                                            //
+// append! (Int64)                                                         //
 /////////////////////////////////////////////////////////////////////////////
+
 @test
-def appendInt6401!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt64!(sb, 0i64);
+def appendInt6401!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(0i64, sb);
     StringBuilder.toString(sb) == "0"
+}
 
 @test
-def appendInt6402!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt64!(sb, 1i64);
+def appendInt6402!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(1i64, sb);
     StringBuilder.toString(sb) == "1"
+}
 
 @test
-def appendInt6403!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendInt64!(sb, -1i64);
+def appendInt6403!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(-1i64, sb);
     StringBuilder.toString(sb) == "-1"
+}
 
 /////////////////////////////////////////////////////////////////////////////
-// appendBigInt!                                                           //
+// append! (BigInt)                                                        //
 /////////////////////////////////////////////////////////////////////////////
+
 @test
-def appendBigInt01!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendBigInt!(sb, 0ii);
+def appendBigInt01!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(0ii, sb);
     StringBuilder.toString(sb) == "0"
+}
 
 @test
-def appendBigInt02!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendBigInt!(sb, 1ii);
+def appendBigInt02!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(1ii, sb);
     StringBuilder.toString(sb) == "1"
+}
 
 @test
-def appendBigInt03!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendBigInt!(sb, -1ii);
+def appendBigInt03!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(-1ii, sb);
     StringBuilder.toString(sb) == "-1"
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // appendFloat32!                                                          //
 /////////////////////////////////////////////////////////////////////////////
+
 @test
-def appendFloat3201!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendFloat32!(sb, 0.0f32);
+def appendFloat3201!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(0.0f32, sb);
     StringBuilder.toString(sb) == "0.0"
+}
 
 @test
-def appendFloat3202!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendFloat32!(sb, Float32.nan());
+def appendFloat3202!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(Float32.nan(), sb);
     StringBuilder.toString(sb) == "NaN"
+}
 
 @test
-def appendFloat3203!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendFloat32!(sb, Float32.positiveInfinity());
+def appendFloat3203!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(Float32.positiveInfinity(), sb);
     StringBuilder.toString(sb) == "Infinity"
+}
 
 @test
-def appendFloat3204!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendFloat32!(sb, Float32.negativeInfinity());
+def appendFloat3204!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(Float32.negativeInfinity(), sb);
     StringBuilder.toString(sb) == "-Infinity"
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // appendFloat64!                                                          //
 /////////////////////////////////////////////////////////////////////////////
+
 @test
-def appendFloat6401!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendFloat64!(sb, 0.0f64);
+def appendFloat6401!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(0.0f64, sb);
     StringBuilder.toString(sb) == "0.0"
+}
 
 @test
-def appendFloat6402!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendFloat64!(sb, Float64.nan());
+def appendFloat6402!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(Float64.nan(), sb);
     StringBuilder.toString(sb) == "NaN"
+}
 
 @test
-def appendFloat6403!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendFloat64!(sb, Float64.positiveInfinity());
+def appendFloat6403!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(Float64.positiveInfinity(), sb);
     StringBuilder.toString(sb) == "Infinity"
+}
 
 @test
-def appendFloat6404!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendFloat64!(sb, Float64.negativeInfinity());
+def appendFloat6404!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!(Float64.negativeInfinity(), sb);
     StringBuilder.toString(sb) == "-Infinity"
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // appendLineSeparator!                                                    //
 /////////////////////////////////////////////////////////////////////////////
-@test
-def appendLineSeparator01!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLineSeparator!(sb);
-    StringBuilder.toString(sb) == String.lineSeparator()
 
 @test
-def appendLineSeparator02!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendChar!(sb, 'A');
+def appendLineSeparator01!(): Bool = region r {
+    let sb = new StringBuilder(r);
     StringBuilder.appendLineSeparator!(sb);
-    StringBuilder.appendChar!(sb, 'B');
+    StringBuilder.toString(sb) == String.lineSeparator()
+}
+
+@test
+def appendLineSeparator02!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!('A', sb);
+    StringBuilder.appendLineSeparator!(sb);
+    StringBuilder.append!('B', sb);
     let s1 = "A" + String.lineSeparator() + "B";
     StringBuilder.toString(sb) == s1
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // appendLine!                                                             //
 /////////////////////////////////////////////////////////////////////////////
-@test
-def appendLine01!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLine!(sb, "");
-    StringBuilder.toString(sb) == String.lineSeparator()
 
 @test
-def appendLine02!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLine!(sb, "A");
+def appendLine01!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLine!("", sb);
+    StringBuilder.toString(sb) == String.lineSeparator()
+}
+
+@test
+def appendLine02!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLine!("A", sb);
     let s1 = "A" + String.lineSeparator();
     StringBuilder.toString(sb) == s1
+}
 
 @test
-def appendLine03!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLine!(sb, "A");
-    StringBuilder.appendLine!(sb, "B");
+def appendLine03!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLine!("A", sb);
+    StringBuilder.appendLine!("B", sb);
     let s1 = "A" + String.lineSeparator() + "B" + String.lineSeparator();
     StringBuilder.toString(sb) == s1
+}
 
 @test
-def appendLine04!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLine!(sb, "A");
-    StringBuilder.appendLine!(sb, "B");
-    StringBuilder.appendLine!(sb, "C");
+def appendLine04!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLine!("A", sb);
+    StringBuilder.appendLine!("B", sb);
+    StringBuilder.appendLine!("C", sb);
     let s1 = "A" + String.lineSeparator() + "B" + String.lineSeparator() + "C" + String.lineSeparator();
     StringBuilder.toString(sb) == s1
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // appendLineWith!                                                         //
 /////////////////////////////////////////////////////////////////////////////
+
 @test
-def appendLineWith01!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLineWith!(sb, Int32.toString, 1);
+def appendLineWith01!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLineWith!(Int32.toString, 1, sb);
     let s1 = "1" + String.lineSeparator();
     StringBuilder.toString(sb) == s1
+}
 
 @test
-def appendLineWith02!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLineWith!(sb, Int32.toString, 1);
-    StringBuilder.appendLineWith!(sb, Int32.toString, 2);
+def appendLineWith02!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLineWith!(Int32.toString, 1, sb);
+    StringBuilder.appendLineWith!(Int32.toString, 2, sb);
     let s1 = "1" + String.lineSeparator() + "2" + String.lineSeparator();
     StringBuilder.toString(sb) == s1
+}
 
 @test
-def appendLineWith03!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLineWith!(sb, Int32.toString, 1);
-    StringBuilder.appendLineWith!(sb, Int32.toString, 2);
-    StringBuilder.appendLineWith!(sb, Int32.toString, 3);
+def appendLineWith03!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLineWith!(Int32.toString, 1, sb);
+    StringBuilder.appendLineWith!(Int32.toString, 2, sb);
+    StringBuilder.appendLineWith!(Int32.toString, 3, sb);
     let s1 = "1" + String.lineSeparator() + "2" + String.lineSeparator() + "3" + String.lineSeparator();
     StringBuilder.toString(sb) == s1
+}
 
 @test
-def appendLineWith04!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLineWith!(sb, Int32.toString, 1);
-    StringBuilder.appendLineWith!(sb, Int32.toString, 2);
-    StringBuilder.appendLineWith!(sb, Int32.toString, 3);
-    StringBuilder.appendLineWith!(sb, Int32.toString, 4);
+def appendLineWith04!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLineWith!(Int32.toString, 1, sb);
+    StringBuilder.appendLineWith!(Int32.toString, 2, sb);
+    StringBuilder.appendLineWith!(Int32.toString, 3, sb);
+    StringBuilder.appendLineWith!(Int32.toString, 4, sb);
     let s1 = "1" + String.lineSeparator() + "2" + String.lineSeparator() + "3" + String.lineSeparator() + "4" + String.lineSeparator();
     StringBuilder.toString(sb) == s1
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // appendLines                                                             //
 /////////////////////////////////////////////////////////////////////////////
-@test
-def appendLines01!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLines!(sb, []);
-    StringBuilder.toString(sb) == ""
 
 @test
-def appendLines02!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLines!(sb, ["A"]);
+def appendLines01!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLines!(Array#{} @ r, sb);
+    StringBuilder.toString(sb) == ""
+}
+
+@test
+def appendLines02!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLines!(Array#{"A"} @ r, sb);
     let s1 = "A" + String.lineSeparator();
     StringBuilder.toString(sb) == s1
+}
 
 @test
-def appendLines03!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLines!(sb, ["A", "B"]);
+def appendLines03!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLines!(Array#{"A", "B"} @ r, sb);
     let s1 = "A" + String.lineSeparator() + "B" + String.lineSeparator();
     StringBuilder.toString(sb) == s1
+}
 
 @test
-def appendLines04!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLines!(sb, ["A", "B", "C"]);
+def appendLines04!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLines!(Array#{"A", "B", "C"} @ r, sb);
     let s1 = "A" + String.lineSeparator() + "B" + String.lineSeparator() + "C" + String.lineSeparator();
     StringBuilder.toString(sb) == s1
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// appendLinesWith                                                         //
+/////////////////////////////////////////////////////////////////////////////
+
+@test
+def appendLinesWith01(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLinesWith(Int32.toString, Nil, sb);
+    StringBuilder.toString(sb) == ""
+}
+
+@test
+def appendLinesWith02(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLinesWith(Int32.toString, Set#{1}, sb);
+    let s1 = "1" + String.lineSeparator();
+    StringBuilder.toString(sb) == s1
+}
+
+@test
+def appendLinesWith03(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLinesWith(Int32.toString, List.toChain(1 :: 2 :: Nil), sb);
+    let s1 = "1" + String.lineSeparator() + "2" + String.lineSeparator();
+    StringBuilder.toString(sb) == s1
+}
+
+@test
+def appendLinesWith04(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLinesWith(Int32.toString, 1 :: 2 :: 3 :: Nil, sb);
+    let s1 = "1" + String.lineSeparator() + "2" + String.lineSeparator() + "3" + String.lineSeparator();
+    StringBuilder.toString(sb) == s1
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // appendLinesWith!                                                        //
 /////////////////////////////////////////////////////////////////////////////
-@test
-def appendLinesWith01!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLinesWith!(sb, Int32.toString, []: Array[Int32]);
-    StringBuilder.toString(sb) == ""
 
 @test
-def appendLinesWith02!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLinesWith!(sb, Int32.toString, [1]);
+def appendLinesWith01!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLinesWith!(Int32.toString, (Array#{} @ r): Array[Int32, _], sb);
+    StringBuilder.toString(sb) == ""
+}
+
+@test
+def appendLinesWith02!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLinesWith!(Int32.toString, Array#{1} @ r, sb);
     let s1 = "1" + String.lineSeparator();
     StringBuilder.toString(sb) == s1
+}
 
 @test
-def appendLinesWith03!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLinesWith!(sb, Int32.toString, [1, 2]);
+def appendLinesWith03!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLinesWith!(Int32.toString, Array#{1, 2} @ r, sb);
     let s1 = "1" + String.lineSeparator() + "2" + String.lineSeparator();
     StringBuilder.toString(sb) == s1
+}
 
 @test
-def appendLinesWith04!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendLinesWith!(sb, Int32.toString, [1, 2, 3]);
+def appendLinesWith04!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendLinesWith!(Int32.toString, Array#{1, 2, 3} @ r, sb);
     let s1 = "1" + String.lineSeparator() + "2" + String.lineSeparator() + "3" + String.lineSeparator();
     StringBuilder.toString(sb) == s1
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // intercalate!                                                            //
 /////////////////////////////////////////////////////////////////////////////
-@test
-def intercalate01!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.intercalate!(sb, "", []);
-    StringBuilder.toString(sb) == ""
 
 @test
-def intercalate02!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.intercalate!(sb, "::", []);
+def intercalate01!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.intercalate!("", Array#{} @ r, sb);
     StringBuilder.toString(sb) == ""
+}
 
 @test
-def intercalate03!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.intercalate!(sb, "", ["abc", "def"]);
+def intercalate02!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.intercalate!("::", Array#{} @ r, sb);
+    StringBuilder.toString(sb) == ""
+}
+
+@test
+def intercalate03!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.intercalate!("", Array#{"abc", "def"} @ r, sb);
     StringBuilder.toString(sb) == "abcdef"
+}
 
 @test
-def intercalate04!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.intercalate!(sb, "::", ["abc"]);
+def intercalate04!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.intercalate!("::", Array#{"abc"} @ r, sb);
     StringBuilder.toString(sb) == "abc"
+}
 
 @test
-def intercalate05!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.intercalate!(sb, "::", ["abc", "def"]);
+def intercalate05!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.intercalate!("::", Array#{"abc", "def"} @ r, sb);
     StringBuilder.toString(sb) == "abc::def"
+}
 
 @test
-def intercalate06!(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.intercalate!(sb, "::", ["abc", "def", "ghi"]);
+def intercalate06!(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.intercalate!("::", Array#{"abc", "def", "ghi"} @ r, sb);
     StringBuilder.toString(sb) == "abc::def::ghi"
+}
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // iterator                                                                //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def iterator01(): Bool = region r {
+        let sb = new StringBuilder(r);
+        StringBuilder.iterator(r, sb) |> Iterator.toList == Nil
+    }
+
+    @test
+    def iterator02(): Bool = region r {
+        let sb = new StringBuilder(r);
+        StringBuilder.appendString!("abc", sb);
+        StringBuilder.iterator(r, sb) |> Iterator.toList == 'a' :: 'b' :: 'c' :: Nil
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // enumerator                                                              //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def enumerator01(): Bool = region r {
+        let sb = new StringBuilder(r);
+        StringBuilder.enumerator(r, sb) |> Iterator.toList == Nil
+    }
+
+    @test
+    def enumerator02(): Bool = region r {
+        let sb = new StringBuilder(r);
+        StringBuilder.appendString!("abc", sb);
+        StringBuilder.enumerator(r, sb) |> Iterator.toList == (0, 'a') :: (1, 'b') :: (2, 'c') :: Nil
+    }
+
 
 /////////////////////////////////////////////////////////////////////////////
 // length                                                                  //
 /////////////////////////////////////////////////////////////////////////////
+
 @test
-def length01(): Bool & Impure =
-    let sb = StringBuilder.new();
+def length01(): Bool = region r {
+    let sb = new StringBuilder(r);
     StringBuilder.length(sb) == 0
+}
 
 @test
-def length02(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendChar!(sb, 'A');
+def length02(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!('A', sb);
     StringBuilder.length(sb) == 1
+}
 
 @test
-def length03(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendChar!(sb, 'A');
-    StringBuilder.appendChar!(sb, 'B');
+def length03(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.append!('A', sb);
+    StringBuilder.append!('B', sb);
     StringBuilder.length(sb) == 2
+}
 
 @test
-def length04(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendString!(sb, "A");
-    StringBuilder.appendString!(sb, "B");
+def length04(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendString!("A", sb);
+    StringBuilder.appendString!("B", sb);
     StringBuilder.length(sb) == 2
+}
 
 @test
-def length05(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendString!(sb, "Hello");
-    StringBuilder.appendChar!(sb, ' ');
-    StringBuilder.appendString!(sb, "World");
-    StringBuilder.appendChar!(sb, '!');
+def length05(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendString!("Hello", sb);
+    StringBuilder.append!(' ', sb);
+    StringBuilder.appendString!("World", sb);
+    StringBuilder.append!('!', sb);
     StringBuilder.length(sb) == 12
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // toString                                                                //
 /////////////////////////////////////////////////////////////////////////////
-@test
-def toString01(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.toString(sb) == ""
 
 @test
-def toString02(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendString!(sb, "");
+def toString01(): Bool = region r {
+    let sb = new StringBuilder(r);
     StringBuilder.toString(sb) == ""
+}
 
 @test
-def toString03(): Bool & Impure =
-    let sb = StringBuilder.new();
-    StringBuilder.appendString!(sb, "abcdefghijklmnopqrstuvwxyz");
+def toString02(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendString!("", sb);
+    StringBuilder.toString(sb) == ""
+}
+
+@test
+def toString03(): Bool = region r {
+    let sb = new StringBuilder(r);
+    StringBuilder.appendString!("abcdefghijklmnopqrstuvwxyz", sb);
     StringBuilder.toString(sb) == "abcdefghijklmnopqrstuvwxyz"
+}
 
 }

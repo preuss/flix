@@ -14,21 +14,37 @@
  * limitations under the License.
  */
 
-pub enum Comparison {
+pub enum Comparison with Eq, ToString, Sendable {
     case LessThan
     case EqualTo
     case GreaterThan
 }
 
-instance Eq[Comparison] {
+namespace Comparison {
 
-    def eq(x: Comparison, y: Comparison): Bool = match (x, y) {
-        case (LessThan, LessThan) => true
-        case (EqualTo, EqualTo) => true
-        case (GreaterThan, GreaterThan) => true
-        case _ => false
+    ///
+    /// Converts a `Comparison` value to an integer.
+    /// The return value is:
+    /// `-1` if `c` is `LessThan`.
+    /// `0` if `c` is `EqualTo`.
+    /// `+1` if `c` is `GreaterThan`.
+    ///
+    pub def toInt(c: Comparison): Int32 = match c {
+        case LessThan => -1
+        case EqualTo => 0
+        case GreaterThan => +1
     }
 
-    def neq(x: Comparison, y: Comparison): Bool = not (x == y)
+    ///
+    /// Converts an integer to a `Comparison` value.
+    /// The return value is:
+    /// `LessThan` if `i < 0`.
+    /// `EqualTo` if `i == 0`.
+    /// `GreaterThan` if `i > 0`.
+    ///
+    pub def fromInt32(i: Int32): Comparison =
+        if (i < 0) LessThan
+        else if (i == 0) EqualTo
+        else GreaterThan
 
 }

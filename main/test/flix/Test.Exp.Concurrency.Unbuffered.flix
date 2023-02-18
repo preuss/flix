@@ -1,198 +1,230 @@
 namespace Test/Exp/Concurrency/Unbuffered {
 
     @test
-    def testUnbufferedChannelPutGet01(): Bool & Impure =
-        let c = chan Unit 0;
-        spawn c <- ();
-        () == <- c
+    def testUnbufferedChannelPutGet01(): Bool \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.send((), tx) @ r;
+        () == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet02(): Bool & Impure =
-        let c = chan Bool 0;
-        spawn c <- true;
-        true == <- c
+    def testUnbufferedChannelPutGet02(): Bool \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.send(true, tx) @ r;
+        true == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet03(): Bool & Impure =
-        let c = chan Float32 0;
-        spawn c <- 123.456f32;
-        123.456f32 == <- c
+    def testUnbufferedChannelPutGet03(): Bool \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.send(123.456f32, tx) @ r;
+        123.456f32 == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet04(): Bool & Impure =
-        let c = chan Float64 0;
-        spawn c <- 123.456f64;
-        123.456f64 == <- c
+    def testUnbufferedChannelPutGet04(): Bool \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.send(123.456f64, tx) @ r;
+        123.456f64 == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet05(): Bool & Impure =
-        let c = chan Int8 0;
-        spawn c <- 42i8;
-        42i8 == <- c
+    def testUnbufferedChannelPutGet05(): Bool \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.send(42i8, tx) @ r;
+        42i8 == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet06(): Bool & Impure =
-        let c = chan Int16 0;
-        spawn c <- 42i16;
-        42i16 == <- c
+    def testUnbufferedChannelPutGet06(): Bool \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.send(42i16, tx) @ r;
+        42i16 == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet07(): Bool & Impure =
-        let c = chan Int32 0;
-        spawn c <- 42i32;
-        42i32 == <- c
+    def testUnbufferedChannelPutGet07(): Bool \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.send(42i32, tx) @ r;
+        42i32 == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet08(): Bool & Impure =
-        let c = chan Int64 0;
-        spawn c <- 42i64;
-        42i64 == <- c
+    def testUnbufferedChannelPutGet08(): Bool \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.send(42i64, tx) @ r;
+        42i64 == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet09(): Bool & Impure =
-        let c = chan BigInt 0;
-        spawn c <- 42ii;
-        42ii == <- c
+    def testUnbufferedChannelPutGet09(): Bool \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.send(42ii, tx) @ r;
+        42ii == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet10(): Bool & Impure =
-        let c = chan String 0;
-        spawn c <- "Hello World!";
-        "Hello World!" == <- c
+    def testUnbufferedChannelPutGet10(): Bool \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.send("Hello World!", tx) @ r;
+        "Hello World!" == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet11(): Bool & Impure =
-        let c = chan Option[Int] 0;
-        spawn c <- None;
-        None == <- c
+    def testUnbufferedChannelPutGet11(): Bool \ IO = region r {
+        let (tx, rx): (Sender[Option[Int32], _], Receiver[Option[Int32], _]) = Channel.unbuffered(r);
+        spawn Channel.send(None, tx) @ r;
+        None == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet12(): Bool & Impure =
-        let c = chan Option[Int] 0;
-        spawn c <- Some(123);
-        Some(123) == <- c
+    def testUnbufferedChannelPutGet12(): Bool \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.send(Some(123), tx) @ r;
+        Some(123) == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet13(): Bool & Impure =
-        let c = chan Result[Int, String] 0;
-        spawn c <- Ok(123);
-        Ok(123) == <- c
+    def testUnbufferedChannelPutGet13(): Bool \ IO = region r {
+        let (tx, rx): (Sender[Result[String, Int32], _], Receiver[Result[String, Int32], _]) = Channel.unbuffered(r);
+        spawn Channel.send(Ok(123), tx) @ r;
+        Ok(123) == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet14(): Bool & Impure =
-        let c = chan Result[Int, String] 0;
-        spawn c <- Err("Goodbye World!");
-        Err("Goodbye World!") == <- c
+    def testUnbufferedChannelPutGet14(): Bool \ IO = region r {
+        let (tx, rx): (Sender[Result[String, Int32], _], Receiver[Result[String, Int32], _]) = Channel.unbuffered(r);
+        spawn Channel.send(Err("Goodbye World!"), tx) @ r;
+        Err("Goodbye World!") == Channel.recv(rx)
+    }
 
     @test
-    def testUnbufferedChannelPutGet15(): Bool & Impure =
-        let c = chan Array[Int] 0;
-        spawn c <- [1, 2, 3];
-        2 == (<- c)[1]
+    def testUnbufferedChannelPutGet15(): Bool \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.unsafeSend(Array#{1, 2, 3} @ r, tx) @ r;
+        2 == Array.get(1, Channel.recv(rx))
+    }
 
     @test
-    def testUnbufferedChannelPutGet16(): Bool & Impure =
-        let c1 = chan Channel[Int] 0;
-        let c2 = chan Int 0;
-        spawn c1 <- c2;
-        spawn c2 <- 42;
-        42 == <- <- c1
+    def testUnbufferedChannelPutGet16(): Bool \ IO = region r {
+        let (tx1, rx1) = Channel.unbuffered(r);
+        let (tx2, rx2) = Channel.unbuffered(r);
+        spawn Channel.unsafeSend(rx2, tx1) @ r;
+        spawn Channel.send(42, tx2) @ r;
+        42 == Channel.recv(Channel.recv(rx1))
+    }
 
     @test
-    def testUnbufferedChannelGetPut01(): Channel[Unit] & Impure =
-        let c = chan Unit 0;
-        spawn <- c;
-        c <- ()
+    def testUnbufferedChannelGetPut01(): Unit \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send((), tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut02(): Channel[Bool] & Impure =
-        let c = chan Bool 0;
-        spawn <- c;
-        c <- true
+    def testUnbufferedChannelGetPut02(): Unit \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send(true, tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut03(): Channel[Float32] & Impure =
-        let c = chan Float32 0;
-        spawn <- c;
-        c <- 123.456f32
+    def testUnbufferedChannelGetPut03(): Unit \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send(123.456f32, tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut04(): Channel[Float64] & Impure =
-        let c = chan Float64 0;
-        spawn <- c;
-        c <- 123.456f64
+    def testUnbufferedChannelGetPut04(): Unit \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send(123.456f64, tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut05(): Channel[Int8] & Impure =
-        let c = chan Int8 0;
-        spawn <- c;
-        c <- 42i8
-    @test
-
-    def testUnbufferedChannelGetPut06(): Channel[Int16] & Impure =
-        let c = chan Int16 0;
-        spawn <- c;
-        c <- 42i16
+    def testUnbufferedChannelGetPut05(): Unit \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send(42i8, tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut07(): Channel[Int32] & Impure =
-        let c = chan Int32 0;
-        spawn <- c;
-        c <- 42i32
+    def testUnbufferedChannelGetPut06(): Unit \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send(42i16, tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut08(): Channel[Int64] & Impure =
-        let c = chan Int64 0;
-        spawn <- c;
-        c <- 42i64
+    def testUnbufferedChannelGetPut07(): Unit \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send(42i32, tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut09(): Channel[BigInt] & Impure =
-        let c = chan BigInt 0;
-        spawn <- c;
-        c <- 42ii
+    def testUnbufferedChannelGetPut08(): Unit \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send(42i64, tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut10(): Channel[String] & Impure =
-        let c = chan String 0;
-        spawn <- c;
-        c <- "Hello World!"
+    def testUnbufferedChannelGetPut09(): Unit \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send(42ii, tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut11(): Channel[Option[Int]] & Impure =
-        let c = chan Option[Int] 0;
-        spawn <- c;
-        c <- None
+    def testUnbufferedChannelGetPut10(): Unit \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send("Hello World!", tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut12(): Channel[Option[Int]] & Impure =
-        let c = chan Option[Int] 0;
-        spawn <- c;
-        c <- Some(123)
+    def testUnbufferedChannelGetPut11(): Unit \ IO = region r {
+        let (tx, rx): (Sender[Option[Int32], _], Receiver[Option[Int32], _]) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send(None, tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut13(): Channel[Result[Int, String]] & Impure =
-        let c = chan Result[Int, String] 0;
-        spawn <- c;
-        c <- Ok(123)
+    def testUnbufferedChannelGetPut12(): Unit \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send(Some(123), tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut14(): Channel[Result[Int, String]] & Impure =
-        let c = chan Result[Int, String] 0;
-        spawn <- c;
-        c <- Err("Goodbye World!")
+    def testUnbufferedChannelGetPut13(): Unit \ IO = region r {
+        let (tx, rx): (Sender[Result[String, Int32], _], Receiver[Result[String, Int32], _]) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send(Ok(123), tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut15(): Channel[Array[Int]] & Impure =
-        let c = chan Array[Int] 0;
-        spawn <- c;
-        c <- [1, 2, 3]
+    def testUnbufferedChannelGetPut14(): Unit \ IO = region r {
+        let (tx, rx): (Sender[Result[String, Int32], _], Receiver[Result[String, Int32], _]) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.send(Err("Goodbye World!"), tx)
+    }
 
     @test
-    def testUnbufferedChannelGetPut16(): Channel[Int] & Impure =
-        let c1 = chan Channel[Int] 0;
-        let c2 = chan Int 0;
-        spawn <- <- c1;
-        spawn c1 <- c2;
-        c2 <- 42
+    def testUnbufferedChannelGetPut15(): Unit \ IO = region r {
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn Channel.recv(rx) @ r;
+        Channel.unsafeSend(Array#{1, 2, 3} @ r, tx)
+    }
+
+    @test
+    def testUnbufferedChannelGetPut16(): Unit \ IO = region r {
+        let (tx1, rx1) = Channel.unbuffered(r);
+        let (tx2, rx2) = Channel.unbuffered(r);
+        spawn Channel.recv(Channel.recv(rx1)) @ r;
+        spawn Channel.unsafeSend(rx2, tx1) @ r;
+        Channel.send(42, tx2)
+    }
 }

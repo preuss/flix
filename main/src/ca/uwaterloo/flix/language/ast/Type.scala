@@ -17,9 +17,11 @@
 package ca.uwaterloo.flix.language.ast
 
 import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.language.debug.{Audience, FormatType}
+import ca.uwaterloo.flix.language.fmt.{FormatOptions, FormatType}
 import ca.uwaterloo.flix.util.InternalCompilerException
 
+import java.util.Objects
+import scala.annotation.tailrec
 import scala.collection.immutable.SortedSet
 
 /**
@@ -33,6 +35,11 @@ sealed trait Type {
   def kind: Kind
 
   /**
+    * The location of `this` type.
+    */
+  def loc: SourceLocation
+
+  /**
     * Returns the type variables in `this` type.
     *
     * Returns a sorted set to ensure that the compiler is deterministic.
@@ -40,8 +47,34 @@ sealed trait Type {
   def typeVars: SortedSet[Type.Var] = this match {
     case x: Type.Var => SortedSet(x)
     case Type.Cst(tc, _) => SortedSet.empty
-    case Type.Lambda(tvar, tpe) => tpe.typeVars - tvar
-    case Type.Apply(tpe1, tpe2) => tpe1.typeVars ++ tpe2.typeVars
+    case Type.Apply(tpe1, tpe2, _) => tpe1.typeVars ++ tpe2.typeVars
+    case Type.Alias(_, args, _, _) => args.flatMap(_.typeVars).to(SortedSet)
+  }
+
+  /**
+    * Gets all the effects in the given type.
+    */
+  def effects: SortedSet[Symbol.EffectSym] = this match {
+    case Type.Cst(TypeConstructor.Effect(sym), _) => SortedSet(sym)
+
+    case _: Type.Cst => SortedSet.empty
+    case _: Type.Var => SortedSet.empty
+
+    case Type.Apply(tpe1, tpe2, _) => tpe1.effects ++ tpe2.effects
+    case Type.Alias(_, _, tpe, _) => tpe.effects
+  }
+
+  /**
+    * Gets all the cases in the given type.
+    */
+  def cases: SortedSet[Symbol.RestrictableCaseSym] = this match {
+    case Type.Cst(TypeConstructor.CaseSet(syms, _), _) => syms
+
+    case _: Type.Cst => SortedSet.empty
+    case _: Type.Var => SortedSet.empty
+
+    case Type.Apply(tpe1, tpe2, _) => tpe1.cases ++ tpe2.cases
+    case Type.Alias(_, _, tpe, _) => tpe.cases
   }
 
   /**
@@ -65,20 +98,36 @@ sealed trait Type {
     * }}}
     */
   def typeConstructor: Option[TypeConstructor] = this match {
-    case Type.Var(_, _, _, _) => None
+    case Type.Var(_, _) => None
     case Type.Cst(tc, _) => Some(tc)
-    case Type.Apply(t1, _) => t1.typeConstructor
-    case Type.Lambda(_, _) => throw InternalCompilerException(s"Unexpected type constructor: Lambda.")
+    case Type.Apply(t1, _, _) => t1.typeConstructor
+    case Type.Alias(_, _, tpe, _) => tpe.typeConstructor
+  }
+
+  /**
+    * Returns the base type of a type application.
+    * Similar to [[Type.typeConstructor]] except that here we return the type (rather than the constructor),
+    * which may be a non-[[Type.Cst]] type.
+    *
+    * {{{
+    * Option[Int] => Option
+    * a[Int]      => a
+    * }}}
+    *
+    */
+  def baseType: Type.BaseType = this match {
+    case Type.Apply(t1, _, _) => t1.baseType
+    case bt: Type.BaseType => bt
   }
 
   /**
     * Returns a list of all type constructors in `this` type.
     */
   def typeConstructors: List[TypeConstructor] = this match {
-    case Type.Var(_, _, _, _) => Nil
+    case Type.Var(_, _) => Nil
     case Type.Cst(tc, _) => tc :: Nil
-    case Type.Apply(t1, t2) => t1.typeConstructors ::: t2.typeConstructors
-    case Type.Lambda(_, _) => throw InternalCompilerException(s"Unexpected type constructor: Lambda.")
+    case Type.Apply(t1, t2, _) => t1.typeConstructors ::: t2.typeConstructors
+    case Type.Alias(_, _, tpe, _) => tpe.typeConstructors
   }
 
   /**
@@ -97,7 +146,7 @@ sealed trait Type {
     * }}}
     */
   def typeArguments: List[Type] = this match {
-    case Type.Apply(tpe1, tpe2) => tpe1.typeArguments ::: tpe2 :: Nil
+    case Type.Apply(tpe1, tpe2, _) => tpe1.typeArguments ::: tpe2 :: Nil
     case _ => Nil
   }
 
@@ -107,8 +156,8 @@ sealed trait Type {
   def map(f: Type.Var => Type): Type = this match {
     case tvar: Type.Var => f(tvar)
     case Type.Cst(_, _) => this
-    case Type.Lambda(tvar, tpe) => Type.Lambda(tvar, tpe.map(f))
-    case Type.Apply(tpe1, tpe2) => Type.Apply(tpe1.map(f), tpe2.map(f))
+    case Type.Apply(tpe1, tpe2, loc) => Type.Apply(tpe1.map(f), tpe2.map(f), loc)
+    case Type.Alias(sym, args, tpe, loc) => Type.Alias(sym, args.map(_.map(f)), tpe.map(f), loc)
   }
 
   /**
@@ -117,8 +166,8 @@ sealed trait Type {
     * NB: Assumes that `this` type is an arrow.
     */
   def arrowArgTypes: List[Type] = typeConstructor match {
-    case Some(TypeConstructor.Arrow(n)) => typeArguments.drop(1).dropRight(1)
-    case _ => throw InternalCompilerException(s"Unexpected non-arrow type: '$this'.")
+    case Some(TypeConstructor.Arrow(n)) => typeArguments.drop(2).dropRight(1)
+    case _ => throw InternalCompilerException(s"Unexpected non-arrow type: '$this'.", loc)
   }
 
   /**
@@ -128,7 +177,17 @@ sealed trait Type {
     */
   def arrowResultType: Type = typeConstructor match {
     case Some(TypeConstructor.Arrow(n)) => typeArguments.last
-    case _ => throw InternalCompilerException(s"Unexpected non-arrow type: '$this'.")
+    case _ => throw InternalCompilerException(s"Unexpected non-arrow type: '$this'.", loc)
+  }
+
+  /**
+    * Returns the purity type of `this` arrow type.
+    *
+    * NB: Assumes that `this` type is an arrow.
+    */
+  def arrowPurityType: Type = typeConstructor match {
+    case Some(TypeConstructor.Arrow(n)) => typeArguments.head
+    case _ => throw InternalCompilerException(s"Unexpected non-arrow type: '$this'.", loc)
   }
 
   /**
@@ -137,25 +196,24 @@ sealed trait Type {
     * NB: Assumes that `this` type is an arrow.
     */
   def arrowEffectType: Type = typeConstructor match {
-    case Some(TypeConstructor.Arrow(n)) => typeArguments.head
-    case _ => throw InternalCompilerException(s"Unexpected non-arrow type: '$this'.")
+    case Some(TypeConstructor.Arrow(n)) => typeArguments(1)
+    case _ => throw InternalCompilerException(s"Unexpected non-arrow type: '$this'.", loc)
   }
 
   /**
     * Returns the size of `this` type.
     */
   def size: Int = this match {
-    case Type.Var(_, _, _, _) => 1
-    case Type.Cst(tc, _) => 1
-    case Type.Lambda(_, tpe) => tpe.size + 1
-    case Type.Apply(tpe1, tpe2) => tpe1.size + tpe2.size + 1
+    case Type.Var(_, _) => 1
+    case Type.Cst(_, _) => 1
+    case Type.Apply(tpe1, tpe2, _) => tpe1.size + tpe2.size + 1
+    case Type.Alias(_, _, tpe, _) => tpe.size
   }
 
   /**
     * Returns a human readable string representation of `this` type.
     */
-  override def toString: String = FormatType.formatType(this)(Audience.Internal)
-
+  override def toString: String = FormatType.formatTypeWithOptions(this, FormatOptions.Internal)
 }
 
 object Type {
@@ -197,6 +255,11 @@ object Type {
   val Float64: Type = Type.Cst(TypeConstructor.Float64, SourceLocation.Unknown)
 
   /**
+    * Represents the BigDecimal type.
+    */
+  val BigDecimal: Type = Type.Cst(TypeConstructor.BigDecimal, SourceLocation.Unknown)
+
+  /**
     * Represents the Int8 type.
     */
   val Int8: Type = Type.Cst(TypeConstructor.Int8, SourceLocation.Unknown)
@@ -227,32 +290,11 @@ object Type {
   val Str: Type = Type.Cst(TypeConstructor.Str, SourceLocation.Unknown)
 
   /**
-    * Represents the Array type constructor.
-    *
-    * NB: This type has kind: * -> *.
-    */
-  val Array: Type = Type.Cst(TypeConstructor.Array, SourceLocation.Unknown)
-
-  /**
-    * Represents the Channel type constructor.
-    *
-    * NB: This type has kind: * -> *.
-    */
-  val Channel: Type = Type.Cst(TypeConstructor.Channel, SourceLocation.Unknown)
-
-  /**
     * Represents the Lazy type constructor.
     *
     * NB: This type has kind: * -> *.
     */
   val Lazy: Type = Type.Cst(TypeConstructor.Lazy, SourceLocation.Unknown)
-
-  /**
-    * Represents the Reference type constructor.
-    *
-    * NB: This type has kind: * -> *.
-    */
-  val Ref: Type = Type.Cst(TypeConstructor.Ref, SourceLocation.Unknown)
 
   /**
     * Represents the Relation type constructor.
@@ -267,12 +309,12 @@ object Type {
   /**
     * Represents the type of an empty record.
     */
-  val RecordEmpty: Type = Type.Cst(TypeConstructor.RecordEmpty, SourceLocation.Unknown)
+  val RecordRowEmpty: Type = Type.Cst(TypeConstructor.RecordRowEmpty, SourceLocation.Unknown)
 
   /**
     * Represents the type of an empty schema.
     */
-  val SchemaEmpty: Type = Type.Cst(TypeConstructor.SchemaEmpty, SourceLocation.Unknown)
+  val SchemaRowEmpty: Type = Type.Cst(TypeConstructor.SchemaRowEmpty, SourceLocation.Unknown)
 
   /**
     * Represents the Boolean True.
@@ -315,37 +357,63 @@ object Type {
     */
   val Or: Type = Type.Cst(TypeConstructor.Or, SourceLocation.Unknown)
 
+  /**
+    * Represents the Empty effect type.
+    */
+  val Empty: Type = Type.Cst(TypeConstructor.Empty, SourceLocation.Unknown)
+
+  /**
+    * Represents the All effect type.
+    */
+  val All: Type = Type.Cst(TypeConstructor.All, SourceLocation.Unknown)
+
   /////////////////////////////////////////////////////////////////////////////
   // Constructors                                                            //
   /////////////////////////////////////////////////////////////////////////////
 
   /**
-    * A type variable expression.
+    * The union of non-Apply types.
+    * Used to restrict the range of return values of [[Type.baseType]].
     */
-  case class Var(id: Int, kind: Kind, rigidity: Rigidity = Rigidity.Flexible, text: Option[String] = None) extends Type with Ordered[Type.Var] {
+  sealed trait BaseType extends Type
+
+  /**
+    * A type variable.
+    */
+  case class Var(sym: Symbol.KindedTypeVarSym, loc: SourceLocation) extends Type with BaseType with Ordered[Type.Var] {
+
+    def withText(text: Ast.VarText): Var = Var(sym.withText(text), loc)
+
+    def kind: Kind = sym.kind
+
+    /**
+      * Removes the kind from this var.
+      */
+    def withoutKind: UnkindedType.Var = UnkindedType.Var(sym.withoutKind, loc)
+
     /**
       * Returns `true` if `this` type variable is equal to `o`.
       */
     override def equals(o: scala.Any): Boolean = o match {
-      case that: Var => this.id == that.id
+      case that: Var => this.sym == that.sym
       case _ => false
     }
 
     /**
       * Returns the hash code of `this` type variable.
       */
-    override def hashCode(): Int = id
+    override def hashCode(): Int = sym.hashCode
 
     /**
       * Compares `this` type variable to `that` type variable.
       */
-    override def compare(that: Type.Var): Int = this.id - that.id
+    override def compare(that: Type.Var): Int = this.sym.id - that.sym.id
   }
 
   /**
     * A type represented by the type constructor `tc`.
     */
-  case class Cst(tc: TypeConstructor, loc: SourceLocation) extends Type {
+  case class Cst(tc: TypeConstructor, loc: SourceLocation) extends Type with BaseType {
     def kind: Kind = tc.kind
 
     override def hashCode(): Int = tc.hashCode()
@@ -357,35 +425,34 @@ object Type {
   }
 
   /**
-    * A type expression that represents a type abstraction [x] => tpe.
-    */
-  case class Lambda(tvar: Type.Var, tpe: Type) extends Type {
-    def kind: Kind = Kind.Star ->: tpe.kind
-  }
-
-  /**
     * A type expression that a represents a type application tpe1[tpe2].
     */
-  case class Apply(tpe1: Type, tpe2: Type) extends Type {
+  case class Apply(tpe1: Type, tpe2: Type, loc: SourceLocation) extends Type {
     /**
       * Returns the kind of `this` type.
       *
       * The kind of a type application can unique be determined from the kind of the first type argument `t1`.
       */
-    val kind: Kind = {
+    lazy val kind: Kind = {
       tpe1.kind match {
-        case Kind.Arrow(k1, k2) =>
-          // TODO: Kind check (but only for boolean formulas for now).
-          //          if (k1 == Kind.Bool) {
-          //            val k3 = tpe2.kind
-          //            if (k3 != Kind.Bool && !k3.isInstanceOf[Kind.Var]) {
-          //               throw InternalCompilerException(s"Unexpected non-bool kind: '$k3'.")
-          //            }
-          //          }
-          k2
-        case _ => throw InternalCompilerException(s"Illegal kind: '${tpe1.kind}' of type '$tpe1'.")
+        case Kind.Arrow(_, k2) => k2
+        case _ => throw InternalCompilerException(s"Illegal kind: '${tpe1.kind}' of type '$tpe1'.", loc)
       }
     }
+
+    override def equals(o: Any): Boolean = o match {
+      case that: Apply => this.tpe1 == that.tpe1 && this.tpe2 == that.tpe2
+      case _ => false
+    }
+
+    override def hashCode(): Int = Objects.hash(tpe1, tpe2)
+  }
+
+  /**
+    * A type alias, including the arguments passed to it and the type it represents.
+    */
+  case class Alias(cst: Ast.AliasConstructor, args: List[Type], tpe: Type, loc: SourceLocation) extends Type with BaseType {
+    override def kind: Kind = tpe.kind
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -395,9 +462,9 @@ object Type {
   /**
     * Returns a fresh type variable of the given kind `k` and rigidity `r`.
     */
-  def freshVar(k: Kind, r: Rigidity = Rigidity.Flexible, text: Option[String] = None)(implicit flix: Flix): Type.Var = {
-    val id = flix.genSym.freshId()
-    Type.Var(id, k, r, text)
+  def freshVar(k: Kind, loc: SourceLocation, isRegion: Boolean = false, text: Ast.VarText = Ast.VarText.Absent)(implicit flix: Flix): Type.Var = {
+    val sym = Symbol.freshKindedTypeVarSym(text, k, isRegion, loc)
+    Type.Var(sym, loc)
   }
 
   /**
@@ -431,6 +498,11 @@ object Type {
   def mkFloat64(loc: SourceLocation): Type = Type.Cst(TypeConstructor.Float64, loc)
 
   /**
+    * Returns the BigDecimal type with the given source location `loc`.
+    */
+  def mkBigDecimal(loc: SourceLocation): Type = Type.Cst(TypeConstructor.BigDecimal, loc)
+
+  /**
     * Returns the Int8 type with the given source location `loc`.
     */
   def mkInt8(loc: SourceLocation): Type = Type.Cst(TypeConstructor.Int8, loc)
@@ -461,24 +533,26 @@ object Type {
   def mkString(loc: SourceLocation): Type = Type.Cst(TypeConstructor.Str, loc)
 
   /**
-    * Returns the Array type with the given source location `loc`.
+    * Returns the True type with the given source location `loc`.
     */
-  def mkArray(loc: SourceLocation): Type = Type.Cst(TypeConstructor.Array, loc)
+  def mkTrue(loc: SourceLocation): Type = Type.Cst(TypeConstructor.True, loc)
 
   /**
-    * Returns the type `Array[tpe]` with the given optional source location `loc`.
+    * Returns the False type with the given source location `loc`.
     */
-  def mkArray(elmType: Type, loc: SourceLocation = SourceLocation.Unknown): Type = Apply(Type.Cst(TypeConstructor.Array, loc), elmType)
+  def mkFalse(loc: SourceLocation): Type = Type.Cst(TypeConstructor.False, loc)
 
   /**
-    * Returns the Channel type with the given source location `loc`.
+    * Returns the type `Sender[tpe, reg]` with the given optional source location `loc`.
     */
-  def mkChannel(loc: SourceLocation): Type = Type.Cst(TypeConstructor.Channel, loc)
+  def mkSender(tpe: Type, reg: Type, loc: SourceLocation): Type =
+    Apply(Apply(Cst(TypeConstructor.Sender, loc), tpe, loc), reg, loc)
 
   /**
-    * Returns the type `Channel[tpe]` with the given optional source location `loc`.
+    * Returns the type `Receiver[tpe, reg]` with the given optional source location `loc`.
     */
-  def mkChannel(tpe: Type, loc: SourceLocation = SourceLocation.Unknown): Type = Type.Apply(Type.Cst(TypeConstructor.Channel, loc), tpe)
+  def mkReceiver(tpe: Type, reg: Type, loc: SourceLocation): Type =
+    Apply(Apply(Cst(TypeConstructor.Receiver, loc), tpe, loc), reg, loc)
 
   /**
     * Returns the Lazy type with the given source location `loc`.
@@ -488,88 +562,96 @@ object Type {
   /**
     * Returns the type `Lazy[tpe]` with the given optional source location `loc`.
     */
-  def mkLazy(tpe: Type, loc: SourceLocation = SourceLocation.Unknown): Type = Type.Apply(Type.Cst(TypeConstructor.Lazy, loc), tpe)
+  def mkLazy(tpe: Type, loc: SourceLocation): Type = Type.Apply(Type.Cst(TypeConstructor.Lazy, loc), tpe, loc)
 
   /**
-    * Returns the Ref type with the given source location `loc`.
+    * Returns the type `Array[tpe, reg]` with the given source location `loc`.
     */
-  def mkRef(loc: SourceLocation): Type = Type.Cst(TypeConstructor.Ref, loc)
+  def mkArray(tpe: Type, reg: Type, loc: SourceLocation): Type =
+    Apply(Apply(Cst(TypeConstructor.Array, loc), tpe, loc), reg, loc)
 
   /**
-    * Returns the type `Ref[tpe]` with the given optional source location `loc`.
+    * Returns the type `Array[tpe]` with the given source location `loc`.
     */
-  def mkRef(tpe: Type, loc: SourceLocation = SourceLocation.Unknown): Type = Type.Apply(Type.Cst(TypeConstructor.Ref, loc), tpe)
+  def mkVector(tpe: Type, loc: SourceLocation): Type =
+    Apply(Cst(TypeConstructor.Vector, loc), tpe, loc)
+
+  /**
+    * Returns the type `Ref[tpe, reg]` with the given source location `loc`.
+    */
+  def mkRef(tpe: Type, reg: Type, loc: SourceLocation): Type =
+    Apply(Apply(Cst(TypeConstructor.Ref, loc), tpe, loc), reg, loc)
 
   /**
     * Constructs the pure arrow type A -> B.
     */
-  def mkPureArrow(a: Type, b: Type): Type = mkArrowWithEffect(a, Pure, b)
+  def mkPureArrow(a: Type, b: Type, loc: SourceLocation): Type = mkArrowWithEffect(a, Pure, Empty, b, loc)
 
   /**
     * Constructs the impure arrow type A ~> B.
     */
-  def mkImpureArrow(a: Type, b: Type): Type = mkArrowWithEffect(a, Impure, b)
+  def mkImpureArrow(a: Type, b: Type, loc: SourceLocation): Type = mkArrowWithEffect(a, Impure, Empty, b, loc)
 
   /**
     * Constructs the arrow type A -> B & e.
     */
-  def mkArrowWithEffect(a: Type, e: Type, b: Type): Type = mkApply(Type.Cst(TypeConstructor.Arrow(2), SourceLocation.Unknown), List(e, a, b))
+  def mkArrowWithEffect(a: Type, p: Type, e: Type, b: Type, loc: SourceLocation): Type = mkApply(Type.Cst(TypeConstructor.Arrow(2), loc), List(p, e, a, b), loc)
 
   /**
     * Constructs the pure curried arrow type A_1 -> (A_2  -> ... -> A_n) -> B.
     */
-  def mkPureCurriedArrow(as: List[Type], b: Type): Type = mkCurriedArrowWithEffect(as, Pure, b)
+  def mkPureCurriedArrow(as: List[Type], b: Type, loc: SourceLocation): Type = mkCurriedArrowWithEffect(as, Pure, Empty, b, loc)
 
   /**
     * Constructs the impure curried arrow type A_1 -> (A_2  -> ... -> A_n) ~> B.
     */
-  def mkImpureCurriedArrow(as: List[Type], b: Type): Type = mkCurriedArrowWithEffect(as, Impure, b)
+  def mkImpureCurriedArrow(as: List[Type], b: Type, loc: SourceLocation): Type = mkCurriedArrowWithEffect(as, Impure, Empty, b, loc)
 
   /**
     * Constructs the curried arrow type A_1 -> (A_2  -> ... -> A_n) -> B & e.
     */
-  def mkCurriedArrowWithEffect(as: List[Type], e: Type, b: Type): Type = {
+  def mkCurriedArrowWithEffect(as: List[Type], p: Type, e: Type, b: Type, loc: SourceLocation): Type = {
     val a = as.last
-    val base = mkArrowWithEffect(a, e, b)
-    as.init.foldRight(base)(mkPureArrow)
+    val base = mkArrowWithEffect(a, p, e, b, loc)
+    as.init.foldRight(base)(mkPureArrow(_, _, loc))
   }
 
   /**
     * Constructs the pure uncurried arrow type (A_1, ..., A_n) -> B.
     */
-  def mkPureUncurriedArrow(as: List[Type], b: Type): Type = mkUncurriedArrowWithEffect(as, Pure, b)
+  def mkPureUncurriedArrow(as: List[Type], b: Type, loc: SourceLocation): Type = mkUncurriedArrowWithEffect(as, Pure, Empty, b, loc)
 
   /**
     * Constructs the impure uncurried arrow type (A_1, ..., A_n) ~> B.
     */
-  def mkImpureUncurriedArrow(as: List[Type], b: Type): Type = mkUncurriedArrowWithEffect(as, Impure, b)
+  def mkImpureUncurriedArrow(as: List[Type], b: Type, loc: SourceLocation): Type = mkUncurriedArrowWithEffect(as, Impure, Empty, b, loc)
 
   /**
     * Constructs the uncurried arrow type (A_1, ..., A_n) -> B & e.
     */
-  def mkUncurriedArrowWithEffect(as: List[Type], e: Type, b: Type): Type = {
-    val arrow = Type.Apply(Type.Cst(TypeConstructor.Arrow(as.length + 1), SourceLocation.Unknown), e)
+  def mkUncurriedArrowWithEffect(as: List[Type], p: Type, e: Type, b: Type, loc: SourceLocation): Type = {
+    val arrow = mkApply(Type.Cst(TypeConstructor.Arrow(as.length + 1), loc), List(p, e), loc)
     val inner = as.foldLeft(arrow: Type) {
-      case (acc, x) => Apply(acc, x)
+      case (acc, x) => Apply(acc, x, loc)
     }
-    Apply(inner, b)
+    Apply(inner, b, loc)
   }
 
   /**
     * Constructs the apply type base[t_1, ,..., t_n].
     */
-  def mkApply(base: Type, ts: List[Type]): Type = ts.foldLeft(base) {
-    case (acc, t) => Apply(acc, t)
+  def mkApply(base: Type, ts: List[Type], loc: SourceLocation): Type = ts.foldLeft(base) {
+    case (acc, t) => Apply(acc, t, loc)
   }
 
   /**
     * Returns the type `Choice[tpe, isAbsent, isPresent]`.
     */
-  def mkChoice(tpe0: Type, isAbsent: Type, isPresent: Type): Type = {
+  def mkChoice(tpe0: Type, isAbsent: Type, isPresent: Type, loc: SourceLocation): Type = {
     val sym = Symbol.mkEnumSym("Choice")
     val kind = Kind.Star ->: Kind.Bool ->: Kind.Bool ->: Kind.Star
     val tc = TypeConstructor.Enum(sym, kind)
-    Apply(Apply(Apply(Cst(tc, SourceLocation.Unknown), tpe0), isAbsent), isPresent)
+    Apply(Apply(Apply(Cst(tc, loc), tpe0, loc), isAbsent, loc), isPresent, loc)
   }
 
   /**
@@ -580,173 +662,379 @@ object Type {
   /**
     * Construct the enum type `Sym[ts]`.
     */
-  def mkEnum(sym: Symbol.EnumSym, ts: List[Type]): Type = mkApply(Type.Cst(TypeConstructor.Enum(sym, Kind.mkArrow(ts.length)), SourceLocation.Unknown), ts)
-
-  /**
-    * Constructs a tag type for the given `sym`, `tag`, `caseType` and `resultType`.
-    *
-    * A tag type can be understood as a "function type" from the `caseType` to the `resultType`.
-    *
-    * For example, for:
-    *
-    * {{{
-    * enum List[a] {
-    *   case Nil,
-    *   case Cons(a, List[a])
-    * }
-    *
-    * We have:
-    *
-    *   Nil:  Unit -> List[a]           (caseType = Unit, resultType = List[a])
-    *   Cons: (a, List[a]) -> List[a]   (caseType = (a, List[a]), resultType = List[a])
-    * }}}
-    */
-  def mkTag(sym: Symbol.EnumSym, tag: Name.Tag, caseType: Type, resultType: Type): Type = {
-    Type.Apply(Type.Apply(Type.Cst(TypeConstructor.Tag(sym, tag), SourceLocation.Unknown), caseType), resultType)
-  }
+  def mkEnum(sym: Symbol.EnumSym, ts: List[Type], loc: SourceLocation): Type = mkApply(Type.Cst(TypeConstructor.Enum(sym, Kind.mkArrow(ts.length)), loc), ts, loc)
 
   /**
     * Constructs the tuple type (A, B, ...) where the types are drawn from the list `ts`.
     */
-  def mkTuple(ts: List[Type]): Type = {
-    val init = Type.Cst(TypeConstructor.Tuple(ts.length), SourceLocation.Unknown)
+  def mkTuple(ts: List[Type], loc: SourceLocation): Type = {
+    val init = Type.Cst(TypeConstructor.Tuple(ts.length), loc)
     ts.foldLeft(init: Type) {
-      case (acc, x) => Apply(acc, x)
+      case (acc, x) => Apply(acc, x, loc)
     }
+  }
+
+  /**
+    * Constructs the tuple type (A, B, ...) where the types are drawn from the list `ts`.
+    *
+    * Returns Unit if the list is empty.
+    * Returns the head of the list if it is a singleton list.
+    */
+  def mkTuplish(ts: List[Type], loc: SourceLocation): Type = ts match {
+    case Nil => Type.mkUnit(loc)
+    case t :: Nil => t
+    case list => mkTuple(list, loc)
   }
 
   /**
     * Constructs the a native type.
     */
-  def mkNative(clazz: Class[_]): Type = Type.Cst(TypeConstructor.Native(clazz), SourceLocation.Unknown)
+  def mkNative(clazz: Class[_], loc: SourceLocation): Type = Type.Cst(TypeConstructor.Native(clazz), loc)
 
   /**
     * Constructs a RecordExtend type.
     */
-  def mkRecordExtend(field: Name.Field, tpe: Type, rest: Type): Type = {
-    mkApply(Type.Cst(TypeConstructor.RecordExtend(field), SourceLocation.Unknown), List(tpe, rest))
+  def mkRecordRowEmpty(loc: SourceLocation): Type = {
+    Type.Cst(TypeConstructor.RecordRowEmpty, loc)
   }
 
   /**
     * Constructs a SchemaExtend type.
     */
-  def mkSchemaExtend(pred: Name.Pred, tpe: Type, rest: Type): Type = {
-    mkApply(Type.Cst(TypeConstructor.SchemaExtend(pred), SourceLocation.Unknown), List(tpe, rest))
+  def mkSchemaRowEmpty(loc: SourceLocation): Type = {
+    Type.Cst(TypeConstructor.SchemaRowEmpty, loc)
+  }
+
+  /**
+    * Constructs a RecordExtend type.
+    */
+  def mkRecordRowExtend(field: Name.Field, tpe: Type, rest: Type, loc: SourceLocation): Type = {
+    mkApply(Type.Cst(TypeConstructor.RecordRowExtend(field), loc), List(tpe, rest), loc)
+  }
+
+  /**
+    * Constructs a SchemaExtend type.
+    */
+  def mkSchemaRowExtend(pred: Name.Pred, tpe: Type, rest: Type, loc: SourceLocation): Type = {
+    mkApply(Type.Cst(TypeConstructor.SchemaRowExtend(pred), loc), List(tpe, rest), loc)
+  }
+
+  /**
+    * Constructs a Record type.
+    */
+  def mkRecord(tpe: Type, loc: SourceLocation): Type = {
+    Apply(Type.Cst(TypeConstructor.Record, loc), tpe, loc)
+  }
+
+  /**
+    * Constructs a Schema type.
+    */
+  def mkSchema(tpe: Type, loc: SourceLocation): Type = {
+    Apply(Type.Cst(TypeConstructor.Schema, loc), tpe, loc)
   }
 
   /**
     * Construct a relation type with the given list of type arguments `ts0`.
     */
-  def mkRelation(ts0: List[Type]): Type = {
+  def mkRelation(ts0: List[Type], loc: SourceLocation): Type = {
     val ts = ts0 match {
       case Nil => Type.Unit
       case x :: Nil => x
-      case xs => mkTuple(xs)
+      case xs => mkTuple(xs, loc)
     }
 
-    Apply(Relation, ts)
+    Apply(Relation, ts, loc)
   }
 
   /**
     * Construct a lattice type with the given list of type arguments `ts0`.
     */
-  def mkLattice(ts0: List[Type]): Type = {
+  def mkLattice(ts0: List[Type], loc: SourceLocation): Type = {
     val ts = ts0 match {
       case Nil => Type.Unit
       case x :: Nil => x
-      case xs => mkTuple(xs)
+      case xs => mkTuple(xs, loc)
     }
 
-    Apply(Lattice, ts)
+    Apply(Lattice, ts, loc)
   }
 
   /**
     * Returns the type `Not(tpe0)`.
     */
-  def mkNot(tpe0: Type): Type = tpe0 match {
-    case Type.True => Type.False
-    case Type.False => Type.True
-    case _ => Type.Apply(Type.Not, tpe0)
+  def mkNot(tpe0: Type, loc: SourceLocation): Type = tpe0 match {
+    case Type.True => Type.mkFalse(loc)
+    case Type.False => Type.mkTrue(loc)
+    case _ => Type.Apply(Type.Cst(TypeConstructor.Not, loc), tpe0, loc)
   }
 
   /**
     * Returns the type `And(tpe1, tpe2)`.
+    *
+    * Must not be used before kinding.
     */
-  def mkAnd(tpe1: Type, tpe2: Type): Type = (tpe1, tpe2) match {
+  def mkAnd(tpe1: Type, tpe2: Type, loc: SourceLocation): Type = (tpe1, tpe2) match {
     case (Type.Cst(TypeConstructor.True, _), _) => tpe2
     case (_, Type.Cst(TypeConstructor.True, _)) => tpe1
     case (Type.Cst(TypeConstructor.False, _), _) => Type.False
     case (_, Type.Cst(TypeConstructor.False, _)) => Type.False
-    case _ => Type.Apply(Type.Apply(Type.And, tpe1), tpe2)
+    case (Type.Var(sym1, _), Type.Var(sym2, _)) if sym1 == sym2 => tpe1
+    case _ => Type.Apply(Type.Apply(Type.And, tpe1, loc), tpe2, loc)
   }
 
   /**
     * Returns the type `And(tpe1, And(tpe2, tpe3))`.
+    *
+    * Must not be used before kinding.
     */
-  def mkAnd(tpe1: Type, tpe2: Type, tpe3: Type): Type = mkAnd(tpe1, mkAnd(tpe2, tpe3))
+  def mkAnd(tpe1: Type, tpe2: Type, tpe3: Type, loc: SourceLocation): Type =
+    mkAnd(tpe1, mkAnd(tpe2, tpe3, loc), loc)
+
+  /**
+    * Returns the type `And(tpe1, And(tpe2, And(tpe3, tpe4)))`.
+    *
+    * Must not be used before kinding.
+    */
+  def mkAnd(tpe1: Type, tpe2: Type, tpe3: Type, tpe4: Type, loc: SourceLocation): Type =
+    mkAnd(tpe1, mkAnd(tpe2, mkAnd(tpe3, tpe4, loc), loc), loc)
 
   /**
     * Returns the type `And(tpe1, And(tpe2, ...))`.
+    *
+    * Must not be used before kinding.
     */
-  def mkAnd(tpes: List[Type]): Type = tpes match {
+  def mkAnd(tpes: List[Type], loc: SourceLocation): Type = tpes match {
     case Nil => Type.True
-    case x :: xs => mkAnd(x, mkAnd(xs))
+    case x :: xs => mkAnd(x, mkAnd(xs, loc), loc)
   }
 
   /**
     * Returns the type `Or(tpe1, tpe2)`.
+    *
+    * Must not be used before kinding.
     */
-  def mkOr(tpe1: Type, tpe2: Type): Type = (tpe1, tpe2) match {
+  def mkOr(tpe1: Type, tpe2: Type, loc: SourceLocation): Type = (tpe1, tpe2) match {
     case (Type.Cst(TypeConstructor.True, _), _) => Type.True
     case (_, Type.Cst(TypeConstructor.True, _)) => Type.True
     case (Type.Cst(TypeConstructor.False, _), _) => tpe2
     case (_, Type.Cst(TypeConstructor.False, _)) => tpe1
-    case _ => Type.Apply(Type.Apply(Type.Or, tpe1), tpe2)
+    case (Type.Var(sym1, _), Type.Var(sym2, _)) if sym1 == sym2 => tpe1
+    case _ => Type.Apply(Type.Apply(Type.Or, tpe1, loc), tpe2, loc)
   }
+
+  /**
+    * Returns the type `Or(tpe1, Or(tpe2, ...))`.
+    *
+    * Must not be used before kinding.
+    */
+  def mkOr(tpes: List[Type], loc: SourceLocation): Type = tpes match {
+    case Nil => Type.False
+    case x :: xs => mkOr(x, mkOr(xs, loc), loc)
+  }
+
+  /**
+    * Returns the complement of the given type.
+    *
+    * Must not be used before kinding.
+    */
+  def mkComplement(tpe: Type, loc: SourceLocation): Type = tpe match {
+    case Type.Empty => Type.All
+    case Type.All => Type.Empty
+    case t => Type.Apply(Type.Cst(TypeConstructor.Complement, loc), t, loc)
+  }
+
+  /**
+    * Returns the complement of the given type.
+    *
+    * Must not be used before kinding.
+    */
+  def mkCaseComplement(tpe: Type, sym: Symbol.RestrictableEnumSym, loc: SourceLocation): Type = tpe match {
+    case Type.Apply(Type.Cst(TypeConstructor.CaseComplement(_), _), tpe2, _) => tpe2
+    // TODO RESTR-VARS use universe?
+    case t => Type.Apply(Type.Cst(TypeConstructor.CaseComplement(sym), loc), t, loc)
+  }
+
+  /**
+    * Returns the type `tpe1 + tpe2`
+    *
+    * Must not be used before kinding.
+    */
+  def mkUnion(tpe1: Type, tpe2: Type, loc: SourceLocation): Type = (tpe1, tpe2) match {
+    case (Empty, t) => t
+    case (t, Empty) => t
+    case (All, t) => All
+    case (t, All) => All
+    case _ => mkApply(Type.Cst(TypeConstructor.Union, loc), List(tpe1, tpe2), loc)
+  }
+
+  /**
+    * Returns the union of all the given types.
+    *
+    * Must not be used before kinding.
+    */
+  def mkUnion(tpes: List[Type], loc: SourceLocation): Type = tpes match {
+    case Nil => Type.Empty
+    case x :: xs => mkUnion(x, mkUnion(xs, loc), loc)
+  }
+
+  /**
+    * Returns the type `tpe1 & tpe2`
+    *
+    * Must not be used before kinding.
+    */
+  def mkIntersection(tpe1: Type, tpe2: Type, loc: SourceLocation): Type = (tpe1, tpe2) match {
+    case (Empty, _) => Empty
+    case (_, Empty) => Empty
+    case (All, t) => t
+    case (t, All) => t
+    case _ => mkApply(Type.Cst(TypeConstructor.Intersection, loc), List(tpe1, tpe2), loc)
+  }
+
+  /**
+    * Returns the type `tpe1 + tpe2`
+    *
+    * Must not be used before kinding.
+    */
+  def mkCaseUnion(tpe1: Type, tpe2: Type, sym: Symbol.RestrictableEnumSym, loc: SourceLocation): Type = (tpe1, tpe2) match {
+    case (Type.Cst(TypeConstructor.CaseSet(syms1, _), _), Type.Cst(TypeConstructor.CaseSet(syms2, _), _)) =>
+      Type.Cst( TypeConstructor.CaseSet(syms1 ++ syms2, sym), loc)
+    case (Type.Cst(TypeConstructor.CaseSet(syms1, _), _), t) if syms1.isEmpty => t
+    case (t, Type.Cst(TypeConstructor.CaseSet(syms2, _), _)) if syms2.isEmpty => t
+    // TODO RESTR-VARS ALL case: universe
+    case _ => mkApply(Type.Cst(TypeConstructor.CaseUnion(sym), loc), List(tpe1, tpe2), loc)
+  }
+
+  /**
+    * Returns the type `tpe1 & tpe2`
+    *
+    * Must not be used before kinding.
+    */
+  def mkCaseIntersection(tpe1: Type, tpe2: Type, sym: Symbol.RestrictableEnumSym, loc: SourceLocation): Type = (tpe1, tpe2) match {
+    case (Type.Cst(TypeConstructor.CaseSet(syms1, _), _), Type.Cst(TypeConstructor.CaseSet(syms2, _), _)) =>
+      Type.Cst(TypeConstructor.CaseSet(syms1 & syms2, sym), loc)
+    case (Type.Cst(TypeConstructor.CaseSet(syms1, _), _), _) if syms1.isEmpty => Type.Cst(TypeConstructor.CaseSet(SortedSet.empty, sym), loc)
+    case (_, Type.Cst(TypeConstructor.CaseSet(syms2, _), _)) if syms2.isEmpty => Type.Cst(TypeConstructor.CaseSet(SortedSet.empty, sym), loc)
+    // TODO RESTR-VARS ALL case: universe
+    case _ => mkApply(Type.Cst(TypeConstructor.CaseIntersection(sym), loc), List(tpe1, tpe2), loc)
+  }
+
+  /**
+    * Returns the intersection of all the given types.
+    *
+    * Must not be used before kinding.
+    */
+  def mkIntersection(tpes: List[Type], loc: SourceLocation): Type = tpes match {
+    case Nil => Type.All
+    case x :: xs => mkIntersection(x, mkIntersection(xs, loc), loc)
+  }
+
+  /**
+    * Returns the difference of the given types.
+    *
+    * Must not be used before kinding.
+    */
+  def mkDifference(tpe1: Type, tpe2: Type, loc: SourceLocation): Type = mkIntersection(tpe1, mkComplement(tpe2, loc), loc)
+
+  /**
+    * Returns the difference of the given types.
+    *
+    * Must not be used before kinding.
+    */
+  def mkCaseDifference(tpe1: Type, tpe2: Type, sym: Symbol.RestrictableEnumSym, loc: SourceLocation): Type = {
+    mkCaseIntersection(tpe1, mkCaseComplement(tpe2, sym, loc), sym, loc)
+  }
+
+  /**
+    * Returns a Region type for the given region argument `r` with the given source location `loc`.
+    */
+  def mkRegion(r: Type, loc: SourceLocation): Type =
+    Type.Apply(Type.Cst(TypeConstructor.RegionToStar, loc), r, loc)
 
   /**
     * Returns the type `tpe1 => tpe2`.
     */
-  def mkImplies(tpe1: Type, tpe2: Type): Type = Type.mkOr(Type.mkNot(tpe1), tpe2)
+  def mkImplies(tpe1: Type, tpe2: Type, loc: SourceLocation): Type = mkOr(Type.mkNot(tpe1, loc), tpe2, loc)
 
   /**
     * Returns a Boolean type that represents the equivalence of `x` and `y`.
     *
     * That is, `x == y` iff `(x /\ y) \/ (not x /\ not y)`
     */
-  def mkEquiv(x: Type, y: Type): Type = Type.mkOr(Type.mkAnd(x, y), Type.mkAnd(Type.mkNot(x), Type.mkNot(y)))
+  def mkEquiv(x: Type, y: Type, loc: SourceLocation): Type = mkOr(mkAnd(x, y, loc), mkAnd(Type.mkNot(x, loc), Type.mkNot(y, loc), loc), loc)
 
   /**
-    * Returns a simplified (evaluated) form of the given type `tpe0`.
-    *
-    * Performs beta-reduction of type abstractions and applications.
+    * Replace type aliases with the types they represent.
+    * In general, this function should be used in back-end phases
+    * to clear all aliases for easier processing.
     */
-  def simplify(tpe0: Type): Type = {
-    def eval(t: Type, subst: Map[Type.Var, Type]): Type = t match {
-      case tvar: Type.Var => subst.getOrElse(tvar, tvar)
+  def eraseAliases(t: Type): Type = t match {
+    case tvar: Type.Var => tvar
+    case Type.Cst(_, _) => t
+    case Type.Apply(tpe1, tpe2, loc) => Type.Apply(eraseAliases(tpe1), eraseAliases(tpe2), loc)
+    case Type.Alias(_, _, tpe, _) => eraseAliases(tpe)
+  }
 
-      case Type.Cst(_, _) => t
+  /**
+    * Replace top-level type aliases with the types they represent.
+    * In general, this function should be used in front-end phases
+    * to maintain aliases in error messages to the extent possible.
+    */
+  @tailrec
+  def eraseTopAliases(t: Type): Type = t match {
+    case Type.Alias(_, _, tpe, _) => eraseTopAliases(tpe)
+    case tpe => tpe
+  }
 
-      case Type.Apply(Type.Apply(Type.Cst(TypeConstructor.RecordExtend(field), _), tpe), rest) =>
-        val t1 = eval(tpe, subst)
-        val t2 = eval(rest, subst)
-        Type.mkRecordExtend(field, t1, t2)
-
-      case Type.Apply(Type.Apply(Type.Cst(TypeConstructor.SchemaExtend(pred), _), tpe), rest) =>
-        val t1 = eval(tpe, subst)
-        val t2 = eval(rest, subst)
-        Type.mkSchemaExtend(pred, t1, t2)
-
-      case Type.Lambda(tvar, tpe) => Type.Lambda(tvar, eval(tpe, subst))
-
-      // TODO: Does not take variable capture into account.
-      case Type.Apply(tpe1, tpe2) => (eval(tpe1, subst), eval(tpe2, subst)) match {
-        case (Type.Lambda(tvar, tpe3), t2) => eval(tpe3, subst + (tvar -> t2))
-        case (t1, t2) => Type.Apply(t1, t2)
-      }
+  /**
+    * Returns the Flix Type of a Java Class
+    */
+  def getFlixType(c: Class[_]): Type = {
+    if (c == java.lang.Boolean.TYPE) {
+      Type.Bool
     }
-
-    eval(tpe0, Map.empty)
+    else if (c == java.lang.Byte.TYPE) {
+      Type.Int8
+    }
+    else if (c == java.lang.Short.TYPE) {
+      Type.Int16
+    }
+    else if (c == java.lang.Integer.TYPE) {
+      Type.Int32
+    }
+    else if (c == java.lang.Long.TYPE) {
+      Type.Int64
+    }
+    else if (c == java.lang.Character.TYPE) {
+      Type.Char
+    }
+    else if (c == java.lang.Float.TYPE) {
+      Type.Float32
+    }
+    else if (c == java.lang.Double.TYPE) {
+      Type.Float64
+    }
+    else if (c == classOf[java.math.BigDecimal]) {
+      Type.BigDecimal
+    }
+    else if (c == classOf[java.math.BigInteger]) {
+      Type.BigInt
+    }
+    else if (c == classOf[java.lang.String]) {
+      Type.Str
+    }
+    else if (c == java.lang.Void.TYPE) {
+      Type.Unit
+    }
+    // handle arrays of types
+    else if (c.isArray) {
+      val comp = c.getComponentType
+      val elmType = getFlixType(comp)
+      Type.mkArray(elmType, Type.False, SourceLocation.Unknown)
+    }
+    // otherwise native type
+    else {
+      Type.mkNative(c, SourceLocation.Unknown)
+    }
   }
 
 }

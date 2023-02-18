@@ -31,6 +31,12 @@ namespace Test/Exp/Fixpoint/Constraint {
     }
 
     @test
+    def testBigDecimalConstraint01(): #{A(BigDecimal), R(BigDecimal)} = #{
+        A(0.0ff). A(21.42ff). A(123.456ff).
+        R(x) :- A(x).
+    }
+
+    @test
     def testInt8Constraint01(): #{A(Int8), R(Int8)} = #{
         A(0i8). A(21i8). A(42i8).
         R(x) :- A(x).
@@ -67,38 +73,20 @@ namespace Test/Exp/Fixpoint/Constraint {
     }
 
     @test
-    def testOptionConstraint01(): #{A(Option[Int]), R(Option[Int])} = #{
+    def testOptionConstraint01(): #{A(Option[Int32]), R(Option[Int32])} = #{
         A(None). A(Some(21)). A(Some(42)).
         R(x) :- A(x).
     }
 
-    enum Option[t] {
-        case None,
-        case Some(t)
-    }
-
-    instance Eq[Option[a]] with [a : Eq] {
-        def eq(o1: Option[a], o2: Option[a]): Bool = match (o1, o2) {
-            case (None, None)           => true
-            case (Some(v1), Some(v2))   => v1 == v2
-            case _                      => false
-        }
-
-        def neq(xs: Option[a], ys: Option[a]): Bool = not (xs == ys)
-    }
-
-    instance Hash[Option[a]] with [a : Hash] {
-        def hash(o: Option[a]): Int = match o {
-            case None       => 1046527
-            case Some(x)    => 919 * Hash.hash(x)
-        }
-    }
-
-    instance ToString[Option[a]] with [a : ToString] {
-        def toString(o: Option[a]): String = match o {
-            case None       => "None"
-            case Some(x)    => "Some(${x})"
-        }
+    @test
+    def testPredicateWithTypeVariableTerms01(): Bool = {
+        let p = #{ A(12). };
+        let query1 = query p select () from B();
+        let test1 = query1 == Nil;
+        let _test2 = solve p project C;
+        let query2 = query (solve p project D) select () from D();
+        let test3 = query2 == Nil;
+        test1 and test3
     }
 
 }

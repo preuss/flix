@@ -17,9 +17,9 @@
 package ca.uwaterloo.flix.language.phase
 
 import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.language.CompilationError
+import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast.LiftedAst._
-import ca.uwaterloo.flix.util.{Optimization, Validation}
+import ca.uwaterloo.flix.util.Validation
 import ca.uwaterloo.flix.util.Validation._
 
 /**
@@ -28,18 +28,12 @@ import ca.uwaterloo.flix.util.Validation._
   * Specifically, it replaces `ApplyRef` AST nodes with `ApplyTail` AST nodes
   * when the `ApplyRef` node calls the same function and occurs in tail position.
   */
-object Tailrec extends Phase[Root, Root] {
+object Tailrec {
 
   /**
     * Identifies tail recursive calls in the given AST `root`.
     */
-  def run(root: Root)(implicit flix: Flix): Validation[Root, CompilationError] = flix.phase("Tailrec") {
-    //
-    // Check if tail call elimination is enabled.
-    //
-    if (!(flix.options.optimizations contains Optimization.TailCalls))
-      return root.toSuccess
-
+  def run(root: Root)(implicit flix: Flix): Validation[Root, CompilationMessage] = flix.phase("Tailrec") {
     //
     // Rewrite tail calls.
     //
@@ -63,55 +57,46 @@ object Tailrec extends Phase[Root, Root] {
        * Let: The body expression is in tail position.
        * (The value expression is *not* in tail position).
        */
-      case Expression.Let(sym, exp1, exp2, tpe, loc) =>
+      case Expression.Let(sym, exp1, exp2, tpe, purity, loc) =>
         val e2 = visit(exp2)
-        Expression.Let(sym, exp1, e2, tpe, loc)
+        Expression.Let(sym, exp1, e2, tpe, purity, loc)
 
       /*
        * If-Then-Else: Consequent and alternative are both in tail position.
        * (The condition is *not* in tail position).
        */
-      case Expression.IfThenElse(exp1, exp2, exp3, tpe, loc) =>
+      case Expression.IfThenElse(exp1, exp2, exp3, tpe, purity, loc) =>
         val e2 = visit(exp2)
         val e3 = visit(exp3)
-        Expression.IfThenElse(exp1, e2, e3, tpe, loc)
+        Expression.IfThenElse(exp1, e2, e3, tpe, purity, loc)
 
       /*
        * Branch: Each branch is in tail position.
        */
-      case Expression.Branch(e0, br0, tpe, loc) =>
+      case Expression.Branch(e0, br0, tpe, purity, loc) =>
         val br = br0 map {
           case (sym, exp) => sym -> visit(exp)
         }
-        Expression.Branch(e0, br, tpe, loc)
+        Expression.Branch(e0, br, tpe, purity, loc)
 
       /*
        * ApplyClo.
        */
-      case Expression.ApplyClo(exp, args, tpe, loc) =>
-        Expression.ApplyCloTail(exp, args, tpe, loc)
+      case Expression.ApplyClo(exp, args, tpe, purity, loc) =>
+        Expression.ApplyCloTail(exp, args, tpe, purity, loc)
 
       /*
        * ApplyDef.
        */
-      case Expression.ApplyDef(sym, args, tpe, loc) =>
+      case Expression.ApplyDef(sym, args, tpe, purity, loc) =>
         // Check whether this is a self recursive call.
         if (defn.sym != sym) {
           // Case 1: Tail recursive call.
-          Expression.ApplyDefTail(sym, args, tpe, loc)
+          Expression.ApplyDefTail(sym, args, tpe, purity, loc)
         } else {
           // Case 2: Self recursive call.
-          Expression.ApplySelfTail(sym, defn.fparams, args, tpe, loc)
+          Expression.ApplySelfTail(sym, defn.fparams, args, tpe, purity, loc)
         }
-
-      case Expression.SelectChannel(rules, default, tpe, loc) =>
-        val rs = rules map {
-          case SelectChannelRule(sym, chan, exp) => SelectChannelRule(sym, chan, visit(exp))
-        }
-
-        val d = default.map(exp => visit(exp))
-
-        Expression.SelectChannel(rs, d, tpe, loc)
 
       /*
        * Other expression: No calls in tail position.
