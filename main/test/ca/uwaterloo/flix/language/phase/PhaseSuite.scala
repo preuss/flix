@@ -16,19 +16,30 @@
 
 package ca.uwaterloo.flix.language.phase
 
-import ca.uwaterloo.flix.language.phase.unification.TestUnification
+import ca.uwaterloo.flix.language.phase.unification.{TestBdd, TestBoolFormulaTable, TestQMCtoBoolFormula, TestSetUnification, TestUnification}
 import org.scalatest.Suites
 
 class PhaseSuite extends Suites(
-  new TestParser,
+  // phases
+  new TestEntryPoint,
+  new TestInstances,
+  new TestKinder,
   new TestNamer,
+  new TestParser,
   new TestPatExhaustiveness,
   new TestRedundancy,
+  new TestRegions,
   new TestResolver,
   new TestSafety,
-  new TestTyper,
-  new TestInstances,
   new TestStratifier,
-  new TestUnification,
-  new TestWeeder
+  new TestTyper,
+  new TestWeeder,
+
+  // helpers
+  new TestBdd,
+  new TestBoolFormulaTable,
+  new TestQMCtoBoolFormula,
+  new TestIncremental,
+  new TestSetUnification,
+  new TestUnification
 )

@@ -17,7 +17,7 @@
 ///
 /// A type class for addition.
 ///
-pub lawless class Add[a] {
+pub class Add[a] {
     ///
     /// Returns the sum of `x` and `y`.
     ///
@@ -30,6 +30,10 @@ instance Add[Float32] {
 
 instance Add[Float64] {
     pub def add(x: Float64, y: Float64): Float64 = $FLOAT64_ADD$(x, y)
+}
+
+instance Add[BigDecimal] {
+    pub def add(x: BigDecimal, y: BigDecimal): BigDecimal = $BIGDECIMAL_ADD$(x, y)
 }
 
 instance Add[Int8] {
@@ -54,6 +58,6 @@ instance Add[BigInt] {
 
 instance Add[String] {
     pub def add(x: String, y: String): String =
-        import java.lang.String.concat(String);
-        x.concat(y) as & Pure
+        import java.lang.String.concat(String): String \ {};
+        (x `concat` y)
 }

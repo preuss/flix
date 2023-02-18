@@ -1,10 +1,10 @@
 namespace A {
-    pub lawless class FClass[a] {
+    pub class FClass[a] {
         pub def f(): a
     }
 
-    instance FClass[Int] {
-        pub def f(): Int = 1
+    instance FClass[Int32] {
+        pub def f(): Int32 = 1
     }
 
     @test
@@ -24,12 +24,12 @@ namespace A {
 }
 
 namespace B {
-    pub lawless class FClass[a] {
+    pub class FClass[a] {
         pub def f(): a
     }
 
-    instance FClass[Int] {
-        pub def f(): Int = 2
+    instance FClass[Int32] {
+        pub def f(): Int32 = 2
     }
 
     @test
@@ -50,12 +50,12 @@ namespace B {
 }
 
 namespace C {
-    pub lawless class FClass[a] {
+    pub class FClass[a] {
         pub def f(): a
     }
 
-    instance FClass[Int] {
-        pub def f(): Int = 3
+    instance FClass[Int32] {
+        pub def f(): Int32 = 3
     }
 
     @test
@@ -67,10 +67,10 @@ namespace C {
 }
 
 namespace D {
-    use A/FClass.f;
-    use B/FClass.{f => fb};
-    use X/Y/GClass.g;
-    use X/Y/Z/GClass.{g => gz};
+    use A/FClass.f
+    use B/FClass.{f => fb}
+    use X/Y/GClass.g
+    use X/Y/Z/GClass.{g => gz}
 
     @test
     def testNamespace08(): Bool = f() == 1
@@ -85,62 +85,66 @@ namespace D {
     def testNamespace11(): Bool = gz() == 7
 }
 
-pub lawless class GClass[a] {
+pub class GClass[a] {
     pub def g(): a
 }
 
-instance GClass[Int] {
-    pub def g(): Int = 4
+instance GClass[Int32] {
+    pub def g(): Int32 = 4
 }
 
 namespace X {
-    pub lawless class GClass[a] {
+    pub class GClass[a] {
         pub def g(): a
     }
 
-    instance GClass[Int] {
-        pub def g(): Int = 5
+    instance GClass[Int32] {
+        pub def g(): Int32 = 5
     }
 
     namespace Y {
-        pub lawless class GClass[a] {
+        pub class GClass[a] {
             pub def g(): a
         }
 
-        instance GClass[Int] {
-            pub def g(): Int = 6
+        instance GClass[Int32] {
+            pub def g(): Int32 = 6
         }
 
         namespace Z {
-            pub lawless class GClass[a] {
+            pub class GClass[a] {
                 pub def g(): a
             }
 
-            instance GClass[Int] {
-                pub def g(): Int = 7
+            instance GClass[Int32] {
+                pub def g(): Int32 = 7
             }
         }
     }
 }
 
-@test
-def testNamespace12(): Bool =
-    use X/GClass.g;
-    g() == 5
+namespace Test/Use/Sig {
 
-@test
-def testNamespace13(): Bool =
-    use X/Y/GClass.g;
-    g() == 6
+    @test
+    def testNamespace12(): Bool =
+        use X/GClass.g;
+        g() == 5
 
-@test
-def testNamespace14(): Bool =
-    use X/Y/Z/GClass.g;
-    g() == 7
+    @test
+    def testNamespace13(): Bool =
+        use X/Y/GClass.g;
+        g() == 6
 
-@test
-def testNamespace15(): Bool =
-    use X/GClass.{g => gx};
-    use X/Y/GClass.{g => gxy};
-    use X/Y/Z/GClass.{g => gxyz};
-    (gx() + gxy() + gxyz()) == 18
+    @test
+    def testNamespace14(): Bool =
+        use X/Y/Z/GClass.g;
+        g() == 7
+
+    @test
+    def testNamespace15(): Bool =
+        use X/GClass.{g => gx};
+        use X/Y/GClass.{g => gxy};
+        use X/Y/Z/GClass.{g => gxyz};
+        (gx() + gxy() + gxyz()) == 18
+
+}

@@ -27,31 +27,51 @@ namespace Bool {
     ///
     /// Alias for logical conjunction.
     ///
-    @Time(1) @Space(1)
     pub def ∧(x: Bool, y: Bool): Bool = x and y
 
     ///
     /// Alias for logical disjunction.
     ///
-    @Time(1) @Space(1)
     pub def ∨(x: Bool, y: Bool): Bool = x or y
 
     ///
     /// Alias for logical implication.
     ///
-    @Time(1) @Space(1)
     pub def →(x: Bool, y: Bool): Bool = not x ∨ y
 
     ///
     /// Alias for logical bi-implication.
     ///
-    @Time(1) @Space(1)
     pub def ↔(x: Bool, y: Bool): Bool = (x → y) ∧ (y → x)
 
     ///
     /// Alias for exclusive or.
     ///
-    @Time(1) @Space(1)
     pub def ⊕(x: Bool, y: Bool): Bool = (x ∨ y) ∧ not (x ∧ y)
+
+    ///
+    /// Negation of `x`
+    ///
+    pub def not(x: Bool): Bool = not x
+
+    ///
+    /// Logical and.
+    ///
+    pub def and(x: Bool, y: Lazy[Bool]): Bool = if(x) force y else x
+
+    ///
+    /// Logical or.
+    ///
+    pub def or(x: Bool, y: Lazy[Bool]): Bool = if(x) x else force y
+
+    ///
+    /// Returns `true` if `x` implies `y` logically holds.
+    ///
+    pub def ==>(x: Bool, y: Bool): Bool = not x or y
+
+    ///
+    /// Returns true if `x` implies `y` and vise versa.
+    ///
+    pub def <==>(x: Bool, y: Bool): Bool = x == y
 
 }

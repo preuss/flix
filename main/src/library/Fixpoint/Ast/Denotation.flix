@@ -27,19 +27,29 @@ namespace Fixpoint/Ast {
     /// - a least upper bound (a lub function).
     /// - a greatest lower bound (a glb function).
     ///
+    @Internal
     pub enum Denotation[v] {
         case Relational
         case Latticenal(v, v -> v -> Bool, v -> v -> v, v -> v -> v)
     }
 
     ///
+    /// Returns `true` if the given denotation is relational.
+    ///
+    pub def isRelational(den: Denotation[v]): Bool = match den {
+        case Denotation.Relational => true
+        case _          => false
+    }
+
+    ///
     /// Returns a latticenal denotation associated with the type `t`.
     ///
-    pub def lattice(): Denotation[t] with LowerBound[t], PartialOrder[t], JoinLattice[t], MeetLattice[t] =
+    @Internal
+    pub def lattice(): Denotation[t] with LowerBound[t], JoinLattice[t], MeetLattice[t] =
         // TODO: Why are these type annotations necessary?
-        Latticenal(
+        Denotation.Latticenal(
             LowerBound.minValue() : t,
-            (x: t, y: t) -> PartialOrder.partialCompare(x: t, y: t),
+            (x: t, y: t) -> PartialOrder.lessEqual(x: t, y: t),
             (x: t, y: t) -> JoinLattice.leastUpperBound(x: t, y: t),
             (x: t, y: t) -> MeetLattice.greatestLowerBound(x: t, y:t)
         )
@@ -47,10 +57,11 @@ namespace Fixpoint/Ast {
     ///
     /// Boxes the lattice components inside the given denotation `d`.
     ///
+    @Internal
     pub def box(d: Denotation[t]): Denotation[Boxed] with Boxable[t] = match d {
         case Denotation.Relational => Denotation.Relational
         case Denotation.Latticenal(bot, leq, lub, glb) =>
-            Latticenal(
+            Denotation.Latticenal(
                 Boxable.box(bot),
                 Boxable.lift2b(leq),
                 Boxable.lift2(lub),

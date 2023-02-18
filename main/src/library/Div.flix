@@ -17,7 +17,7 @@
 ///
 /// A type class for division.
 ///
-pub lawless class Div[a] {
+pub class Div[a] {
     ///
     /// Returns `x` divided by `y`.
     ///
@@ -32,22 +32,52 @@ instance Div[Float64] {
     pub def div(x: Float64, y: Float64): Float64 = $FLOAT64_DIV$(x, y)
 }
 
+instance Div[BigDecimal] {
+    pub def div(x: BigDecimal, y: BigDecimal): BigDecimal = $BIGDECIMAL_DIV$(x, y)
+}
+
 instance Div[Int8] {
-    pub def div(x: Int8, y: Int8): Int8 = $INT8_DIV$(x, y)
+    pub def div(x: Int8, y: Int8): Int8 =
+        if (y == 0i8)
+            0i8
+        else
+            $INT8_DIV$(x, y)
 }
 
 instance Div[Int16] {
-    pub def div(x: Int16, y: Int16): Int16 = $INT16_DIV$(x, y)
+    pub def div(x: Int16, y: Int16): Int16 =
+        if (y == 0i16)
+            0i16
+        else
+            $INT16_DIV$(x, y)
 }
 
 instance Div[Int32] {
-    pub def div(x: Int32, y: Int32): Int32 = $INT32_DIV$(x, y)
+    pub def div(x: Int32, y: Int32): Int32 =
+        if (y == 0i32)
+            0i32
+        else
+            $INT32_DIV$(x, y)
 }
 
 instance Div[Int64] {
-    pub def div(x: Int64, y: Int64): Int64 = $INT64_DIV$(x, y)
+    pub def div(x: Int64, y: Int64): Int64 =
+        if (y == 0i64)
+            0i64
+        else
+            $INT64_DIV$(x, y)
 }
 
 instance Div[BigInt] {
-    pub def div(x: BigInt, y: BigInt): BigInt = $BIGINT_DIV$(x, y)
+    pub def div(x: BigInt, y: BigInt): BigInt =
+        if (y == 0ii)
+            0ii
+        else
+            $BIGINT_DIV$(x, y)
+}
+
+instance Div[String] {
+    pub def div(x: String, y: String): String =
+        import static get java.io.File.separator: String \ {} as separator;
+        (x + separator() + y)
 }

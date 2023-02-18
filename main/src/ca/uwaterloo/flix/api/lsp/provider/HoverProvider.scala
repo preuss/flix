@@ -15,65 +15,105 @@
  */
 package ca.uwaterloo.flix.api.lsp.provider
 
+import ca.uwaterloo.flix.api.Flix
 import ca.uwaterloo.flix.api.lsp.{Entity, Index, MarkupContent, MarkupKind, Position, Range}
-import ca.uwaterloo.flix.language.ast.TypedAst.{Expression, Root}
-import ca.uwaterloo.flix.language.ast.{Ast, SourceLocation, Symbol, Type, TypeConstructor}
-import ca.uwaterloo.flix.language.debug._
+import ca.uwaterloo.flix.language.ast.TypedAst.Root
+import ca.uwaterloo.flix.language.ast.{SourceLocation, Symbol, Type, TypeConstructor}
+import ca.uwaterloo.flix.language.fmt._
+import ca.uwaterloo.flix.language.phase.unification.SetFormula
+import ca.uwaterloo.flix.language.phase.unification.TypeMinimization.minimizeType
 import org.json4s.JsonAST.JObject
 import org.json4s.JsonDSL._
 
+import scala.annotation.tailrec
+
 object HoverProvider {
 
-  implicit val audience: Audience = Audience.External
-
-  def processHover(uri: String, pos: Position)(implicit index: Index, root: Root): JObject = {
+  def processHover(uri: String, pos: Position, current: Boolean)(implicit index: Index, root: Root, flix: Flix): JObject = {
     index.query(uri, pos) match {
       case None => mkNotFound(uri, pos)
 
-      case Some(entity) => entity match {
-
-        case Entity.Case(caze) => hoverTypAndEff(caze.sc.base, Type.Pure, caze.tag.loc)
-
-        case Entity.Enum(enu) => hoverTypeConstructor(enu.sc.base.typeConstructor.getOrElse(TypeConstructor.Unit), enu.sym.loc)
-
-        case Entity.Exp(exp) =>
-          exp match {
-            case Expression.Def(sym, _, loc) => hoverDef(sym, loc)
-
-            case Expression.Sig(sym, _, loc) => hoverSig(sym, loc)
-
-            case Expression.FixpointConstraintSet(_, stf, tpe, loc) => hoverFixpoint(tpe, Type.Pure, stf, loc)
-
-            case Expression.FixpointMerge(_, _, stf, tpe, eff, loc) => hoverFixpoint(tpe, eff, stf, loc)
-
-            case Expression.FixpointSolve(_, stf, tpe, eff, loc) => hoverFixpoint(tpe, eff, stf, loc)
-
-            case _ => hoverTypAndEff(exp.tpe, exp.eff, exp.loc)
-          }
-
-        case Entity.Pattern(pat) => hoverTypAndEff(pat.tpe, Type.Pure, pat.loc)
-
-        case Entity.LocalVar(sym, tpe) => hoverTypAndEff(tpe, Type.Pure, sym.loc)
-
-        case Entity.TypeCon(tc, loc) => hoverTypeConstructor(tc, loc)
-
-        case _ => mkNotFound(uri, pos)
-      }
+      case Some(entity) => hoverEntity(entity, uri, pos, current)
     }
   }
 
-  private def hoverTypAndEff(tpe: Type, eff: Type, loc: SourceLocation)(implicit index: Index, root: Root): JObject = {
-    val markup = formatTypAndEff(tpe, eff)
+  @tailrec
+  private def hoverEntity(entity: Entity, uri: String, pos: Position, current: Boolean)(implicit Index: Index, root: Root, flix: Flix): JObject = entity match {
+
+    case Entity.Case(caze) => hoverType(caze.tpe, caze.sym.loc, current)
+
+    case Entity.DefUse(sym, loc, _) => hoverDef(sym, loc, current)
+
+    case Entity.SigUse(sym, loc, _) => hoverSig(sym, loc, current)
+
+    case Entity.VarUse(_, _, parent) => hoverEntity(parent, uri, pos, current)
+
+    case Entity.CaseUse(_, _, parent) => hoverEntity(parent, uri, pos, current)
+
+    case Entity.Exp(exp) => hoverTypeAndEff(exp.tpe, exp.pur, exp.eff, exp.loc, current)
+
+    case Entity.FormalParam(fparam) => hoverType(fparam.tpe, fparam.loc, current)
+
+    case Entity.Pattern(pat) => hoverType(pat.tpe, pat.loc, current)
+
+    case Entity.Pred(pred, tpe) => hoverType(tpe, pred.loc, current)
+
+    case Entity.LocalVar(sym, tpe) => hoverType(tpe, sym.loc, current)
+
+    case Entity.Type(t) => hoverKind(t, current)
+
+    case Entity.OpUse(sym, loc, _) => hoverOp(sym, loc, current)
+
+    case Entity.Class(_) => mkNotFound(uri, pos)
+    case Entity.Def(_) => mkNotFound(uri, pos)
+    case Entity.Effect(_) => mkNotFound(uri, pos)
+    case Entity.Enum(_) => mkNotFound(uri, pos)
+    case Entity.TypeAlias(_) => mkNotFound(uri, pos)
+    case Entity.Field(_) => mkNotFound(uri, pos)
+    case Entity.Op(_) => mkNotFound(uri, pos)
+    case Entity.Sig(_) => mkNotFound(uri, pos)
+    case Entity.TypeVar(_) => mkNotFound(uri, pos)
+  }
+
+  private def hoverType(tpe: Type, loc: SourceLocation, current: Boolean)(implicit index: Index, root: Root, flix: Flix): JObject = {
+    val minTpe = minimizeType(tpe)
+    val lowerAndUpperBounds = SetFormula.formatLowerAndUpperBounds(minTpe)
+    val markup =
+      s"""${mkCurrentMsg(current)}
+         |```flix
+         |${FormatType.formatType(minTpe)}$lowerAndUpperBounds
+         |```
+         |""".stripMargin
     val contents = MarkupContent(MarkupKind.Markdown, markup)
     val range = Range.from(loc)
     val result = ("contents" -> contents.toJSON) ~ ("range" -> range.toJSON)
     ("status" -> "success") ~ ("result" -> result)
   }
 
-  private def hoverDef(sym: Symbol.DefnSym, loc: SourceLocation)(implicit index: Index, root: Root): JObject = {
+  private def hoverTypeAndEff(tpe: Type, pur: Type, eff: Type, loc: SourceLocation, current: Boolean)(implicit index: Index, root: Root, flix: Flix): JObject = {
+    val minPur = minimizeType(pur)
+    val minEff = minimizeType(eff)
+    val minTpe = minimizeType(tpe)
+    val lowerAndUpperBounds = SetFormula.formatLowerAndUpperBounds(minTpe)
+    val markup =
+      s"""${mkCurrentMsg(current)}
+         |```flix
+         |${formatTypAndEff(minTpe, minPur, minEff)}$lowerAndUpperBounds
+         |```
+         |""".stripMargin
+    val contents = MarkupContent(MarkupKind.Markdown, markup)
+    val range = Range.from(loc)
+    val result = ("contents" -> contents.toJSON) ~ ("range" -> range.toJSON)
+    ("status" -> "success") ~ ("result" -> result)
+  }
+
+  private def hoverDef(sym: Symbol.DefnSym, loc: SourceLocation, current: Boolean)(implicit index: Index, root: Root, flix: Flix): JObject = {
     val defDecl = root.defs(sym)
     val markup =
-      s"""${FormatSignature.asMarkDown(defDecl)}
+      s"""${mkCurrentMsg(current)}
+         |```flix
+         |${FormatSignature.asMarkDown(defDecl)}
+         |```
          |
          |${FormatDoc.asMarkDown(defDecl.spec.doc)}
          |""".stripMargin
@@ -83,10 +123,13 @@ object HoverProvider {
     ("status" -> "success") ~ ("result" -> result)
   }
 
-  private def hoverSig(sym: Symbol.SigSym, loc: SourceLocation)(implicit index: Index, root: Root): JObject = {
+  private def hoverSig(sym: Symbol.SigSym, loc: SourceLocation, current: Boolean)(implicit index: Index, root: Root, flix: Flix): JObject = {
     val sigDecl = root.sigs(sym)
     val markup =
-      s"""${FormatSignature.asMarkDown(sigDecl)}
+      s"""${mkCurrentMsg(current)}
+         |```flix
+         |${FormatSignature.asMarkDown(sigDecl)}
+         |```
          |
          |${FormatDoc.asMarkDown(sigDecl.spec.doc)}
          |""".stripMargin
@@ -96,11 +139,15 @@ object HoverProvider {
     ("status" -> "success") ~ ("result" -> result)
   }
 
-  private def hoverFixpoint(tpe: Type, eff: Type, stf: Ast.Stratification, loc: SourceLocation)(implicit index: Index, root: Root): JObject = {
+  private def hoverOp(sym: Symbol.OpSym, loc: SourceLocation, current: Boolean)(implicit index: Index, root: Root, flix: Flix): JObject = {
+    val opDecl = root.effects(sym.eff).ops.find(_.sym == sym).get // guaranteed to be present
     val markup =
-      s"""${formatTypAndEff(tpe, eff)}
+      s"""${mkCurrentMsg(current)}
+         |```flix
+         |${FormatSignature.asMarkDown(opDecl)}
+         |```
          |
-         |${formatStratification(stf)}
+         |${FormatDoc.asMarkDown(opDecl.spec.doc)}
          |""".stripMargin
     val contents = MarkupContent(MarkupKind.Markdown, markup)
     val range = Range.from(loc)
@@ -108,39 +155,44 @@ object HoverProvider {
     ("status" -> "success") ~ ("result" -> result)
   }
 
-  private def formatTypAndEff(tpe0: Type, eff0: Type): String = {
+  private def formatTypAndEff(tpe0: Type, pur0: Type, eff0: Type)(implicit flix: Flix): String = {
+    // TODO deduplicate with CompletionProvider
     val t = FormatType.formatType(tpe0)
-    eff0 match {
-      case Type.Cst(TypeConstructor.True, _) => t
-      case Type.Cst(TypeConstructor.False, _) => s"$t & Impure"
-      case eff => s"$t & ${FormatType.formatType(eff)}"
-    }
-  }
 
-  private def hoverTypeConstructor(tc: TypeConstructor, loc: SourceLocation)(implicit index: Index, root: Root): JObject = {
-    val markup = formatKind(tc)
-    val contents = MarkupContent(MarkupKind.Markdown, markup)
-    val range = Range.from(loc)
-    val result = ("contents" -> contents.toJSON) ~ ("range" -> range.toJSON)
-    ("status" -> "success") ~ ("result" -> result)
-  }
-
-  private def formatKind(tc: TypeConstructor): String = {
-    FormatKind.formatKind(tc.kind)
-  }
-
-  private def formatStratification(stf: Ast.Stratification): String = {
-    val sb = new StringBuilder()
-    val max = stf.m.values.max
-    for (i <- 0 to max) {
-      sb.append("Stratum ").append(i).append(":").append("\r\n")
-      for ((sym, stratum) <- stf.m) {
-        if (i == stratum) {
-          sb.append("  ").append(sym).append("\r\n")
-        }
+    // don't show purity if bool effects are turned off
+    val p = if (flix.options.xnobooleffects) {
+      ""
+    } else {
+      pur0 match {
+        case Type.Cst(TypeConstructor.True, _) => ""
+        case Type.Cst(TypeConstructor.False, _) => " & Impure"
+        case pur => " & " + FormatType.formatType(pur)
       }
     }
-    sb.toString()
+
+    // don't show effect if set effects are turned off
+    val e = if (flix.options.xnoseteffects) {
+      ""
+    } else {
+      eff0 match {
+        case Type.Cst(TypeConstructor.Empty, _) => ""
+        case eff => " \\ " + FormatType.formatType(eff)
+      }
+    }
+    s"$t$p$e"
+  }
+
+  private def hoverKind(t: Type, current: Boolean)(implicit index: Index, root: Root): JObject = {
+    val markup =
+      s"""${mkCurrentMsg(current)}
+         |```flix
+         |${FormatKind.formatKind(t.kind)}
+         |```
+         |""".stripMargin
+    val contents = MarkupContent(MarkupKind.Markdown, markup)
+    val range = Range.from(t.loc)
+    val result = ("contents" -> contents.toJSON) ~ ("range" -> range.toJSON)
+    ("status" -> "success") ~ ("result" -> result)
   }
 
   /**
@@ -148,5 +200,9 @@ object HoverProvider {
     */
   private def mkNotFound(uri: String, pos: Position): JObject =
     ("status" -> "failure") ~ ("message" -> s"Nothing found in '$uri' at '$pos'.")
+
+
+  private def mkCurrentMsg(current: Boolean): String =
+    if (!current) "(Information may not be current)" else ""
 
 }

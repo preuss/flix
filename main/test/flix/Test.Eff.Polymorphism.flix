@@ -6,7 +6,7 @@ namespace Test/Eff/Polymorphism {
         f(true, true)
 
     @test
-    def testEffPoly02(): Bool & Impure =
+    def testEffPoly02(): Bool \ IO =
         let f = flip((x, y) -> {impure(); x and y});
         f(true, true)
 
@@ -16,8 +16,8 @@ namespace Test/Eff/Polymorphism {
         f(true, true)
 
     @test
-    def testEffPoly04(): Bool & Impure =
-        let f = flip(flip((x, y) -> {[1, 2, 3]; x and y}));
+    def testEffPoly04(): Bool \ IO =
+        let f = flip(flip((x, y) -> {discard Array#{1, 2, 3} @ Static; x and y}));
         f(true, true)
 
     @test
@@ -27,7 +27,7 @@ namespace Test/Eff/Polymorphism {
         g(true)
 
     @test
-    def testEffPoly06(): Bool & Impure =
+    def testEffPoly06(): Bool \ IO =
         let f = x -> y -> {impure(); x and y};
         let g = f(true);
         g(true)
@@ -39,13 +39,13 @@ namespace Test/Eff/Polymorphism {
         true
 
     @test
-    def testEffPoly08(): Bool & Impure =
+    def testEffPoly08(): Bool \ IO =
         let f = x -> {impure(); y -> x and y};
-        let _ = f(true);
+        discard f(true);
         true
 
     @test
-    def testEffPoly09(): Bool & Impure =
+    def testEffPoly09(): Bool \ IO =
         let f = x -> {impure(); y -> x and y};
         let g = f(true);
         g(true)
@@ -57,19 +57,19 @@ namespace Test/Eff/Polymorphism {
         (f >> g)(true)
 
     @test
-    def testEffPoly11(): Bool & Impure =
+    def testEffPoly11(): Bool \ IO =
         let f = x -> {impure(); x};
         let g = y -> y;
         (f >> g)(true)
 
     @test
-    def testEffPoly12(): Bool & Impure =
+    def testEffPoly12(): Bool \ IO =
         let f = x -> x;
         let g = y -> {impure(); y};
         (f >> g)(true)
 
     @test
-    def testEffPoly13(): Bool & Impure =
+    def testEffPoly13(): Bool \ IO =
         let f = x -> {impure(); x};
         let g = y -> {impure(); y};
         (f >> g)(true)
@@ -87,7 +87,7 @@ namespace Test/Eff/Polymorphism {
         hof(x -> x)
 
     @test
-    def testEffPoly16(): Bool & Impure =
+    def testEffPoly16(): Bool \ IO =
         let hof = f -> {impure(); f(true)};
         hof(x -> x)
 
@@ -96,7 +96,7 @@ namespace Test/Eff/Polymorphism {
         x -> not x
 
     @test
-    def testEffPoly18(): Bool ~> Bool =
+    def testEffPoly18(): Bool -> Bool \ IO =
         x -> {impure(); not x}
 
     @test
@@ -104,21 +104,19 @@ namespace Test/Eff/Polymorphism {
         x -> y -> x and y
 
     @test
-    def testEffPoly20(): Bool -> Bool ~> Bool =
+    def testEffPoly20(): Bool -> (Bool -> Bool \ IO) =
         x -> y -> {impure(); x and y}
 
     @test
-    def testEffPoly21(): Bool ~> Bool -> Bool =
+    def testEffPoly21(): Bool -> (Bool -> Bool) \ IO =
         x -> {impure(); y -> x and y}
 
     @test
-    def testEffPoly22(): Bool ~> Bool ~> Bool =
+    def testEffPoly22(): Bool -> (Bool -> Bool \ IO) \ IO =
         x -> {impure(); y -> {impure(); x and y}}
 
-    def impure(): Unit & Impure = () as & Impure
+    def impure(): Unit \ IO = discard Array#{42} @ Static; ()
 
-    def flip(f: (a, b) -> c & e): (b, a) -> c & e = (x, y) -> f(y, x)
-
+    def flip(f: (a, b) -> c \ ef): (b, a) -> c \ ef = (x, y) -> f(y, x)
 
 }
-

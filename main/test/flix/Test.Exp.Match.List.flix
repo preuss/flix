@@ -1,5 +1,10 @@
 namespace Test/Exp/Match/List {
 
+    // Define an enum with a `Cons` tag to ensure that it's not used in any of the following tests
+    pub enum Foo {
+        case Cons
+    }
+
     @test
     def testMatchList01(): Bool = match Nil {
         case Nil => true
@@ -75,7 +80,7 @@ namespace Test/Exp/Match/List {
     }
 
     @test
-    def testListList01(): Bool = match Nil : List[List[Int]] {
+    def testListList01(): Bool = match Nil : List[List[Int32]] {
         case Nil              => true
         case _                => false
     }
@@ -92,16 +97,6 @@ namespace Test/Exp/Match/List {
         case Nil                             => false
         case (x :: Nil) :: (y :: Nil) :: Nil => x + 1 == y
         case _                               => false
-    }
-
-    enum Option[t] {
-        case None,
-        case Some(t)
-    }
-
-    enum List[t] {
-        case Nil,
-        case Cons(t, List[t])
     }
 
 }

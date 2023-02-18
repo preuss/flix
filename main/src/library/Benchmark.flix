@@ -13,14 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+///
+/// A benchmark has a name and a function to execute. The function is always
+/// impure since timing is considered a side-effect in this context.
+///
+pub enum Benchmark {
+    case Benchmark({name = String, f = Unit -> Unit \ IO})
+}
+
 namespace Benchmark {
 
-    ///
-    /// A benchmark has a name and a function to execute.
-    ///
-    pub enum Benchmark {
-        case Benchmark({name: String, f: Unit -> Unit})
-    }
 
     ///
     /// Returns the minimum number of iterations a benchmark can be executed.
@@ -43,30 +46,33 @@ namespace Benchmark {
     ///
     /// A smart constructor for a benchmark.
     ///
-    pub def defBenchmark(name: String, f: Unit -> a): Benchmark =
+    @Experimental
+    pub def defBenchmark(name: String, f: Unit -> a \ ef): Benchmark =
         let fn = () -> {
-            let _ = f();
+            let _ = unsafe_cast f() as _ \ IO;
             ()
         };
         Benchmark({name = name, f = fn})
 
     pub enum BenchmarkResult {
-        case Success({name: String, rounds: Int32, total: Int64})
+        case Success({name = String, rounds = Int32, total = Int64})
     }
 
     ///
-    /// Runs all benchmarks in `bs`. Attempts to spend no more than `budget` time.
+    /// Runs all benchmarks in `bs`. Attempts to spend no more than `budget` nanoseconds.
+    /// One seconds is `1_000_000_000i64`.
     ///
-    pub def runWithBudget(bs: Array[Benchmark], budget: Int64): Int32 & Impure =
-        if (bs.length == 0) {
+    @Experimental
+    pub def runWithBudget(bs: Array[Benchmark, r], budget: Int64): Int32 \ IO = region r {
+        if (Array.length(bs) == 0) {
             println("No benchmarks");
             1
         } else {
-            import java.lang.System:nanoTime();
+            import static java.lang.System.nanoTime(): Int64 \ IO;
             let t = nanoTime();
             printHeader();
             println("");
-            let benchmarksWithEstimates = warmupAndEstimate(bs);
+            let benchmarksWithEstimates = warmupAndEstimate(r, bs);
             println("");
             println("");
             printCols();
@@ -76,15 +82,16 @@ namespace Benchmark {
             println("Total time elapsed: ${toSeconds(e)} seconds. Time budget was: ${toSeconds(budget)} seconds.");
             0
         }
+    }
 
     ///
     /// Runs every benchmark in `bs` once and estimates its duration.
     ///
-    def warmupAndEstimate(bs: Array[Benchmark]): Array[(Benchmark, Int64)] & Impure = {
-        print("Warmup: ");
-        bs |> Array.map(b -> {
+    def warmupAndEstimate(r1: Region[r1], bs: Array[Benchmark, r]): Array[(Benchmark, Int64), r1] \ IO = {
+        Console.print("Warmup: ");
+        bs |> Array.map(r1, b -> {
             let time = runBenchmarkOnce(b);
-            print(".");
+            Console.print(".");
             (b, time)
         })
     }
@@ -92,9 +99,9 @@ namespace Benchmark {
     ///
     /// Runs all the given benchmarks with estimates `bs` and the given time `budget`.
     ///
-    def runAll(bs: Array[(Benchmark, Int64)], budget: Int64): Unit & Impure = {
-        let budgetPerBenchmark = budget / (Int32.toInt64(bs.length));
-        bs |> Array.foreach(match (b, cost) ->
+    def runAll(bs: Array[(Benchmark, Int64), r], budget: Int64): Unit \ IO = {
+        let budgetPerBenchmark = budget / (Int32.toInt64(Array.length(bs)));
+        bs |> Array.forEach(match (b, cost) ->
             let iters = iterations(cost, budgetPerBenchmark);
             runBenchmark(b, iters) |> printRow
         )
@@ -103,13 +110,13 @@ namespace Benchmark {
     ///
     /// Runs the given benchmark `b` exactly `n` times.
     ///
-    def runBenchmark(b: Benchmark, n: Int32): BenchmarkResult & Impure =
-        import java.lang.System:nanoTime();
+    def runBenchmark(b: Benchmark, n: Int32): BenchmarkResult \ IO =
+        import static java.lang.System.nanoTime(): Int64 \ IO;
         let Benchmark(r) = b;
         let t = nanoTime();
-        let _ = loop(r.f, n);
+        loop(r.f, n);
         let e = nanoTime() - t;
-        Success({name = r.name, rounds = n, total = e})
+        BenchmarkResult.Success({name = r.name, rounds = n, total = e})
 
     ///
     /// Returns the number of nanoseconds it is estimated that a warm JVM
@@ -117,21 +124,21 @@ namespace Benchmark {
     ///
     /// Runs `f` once and divides the time elapsed by the `scaleFactor`.
     ///
-    def runBenchmarkOnce(b: Benchmark): Int64 & Impure =
+    def runBenchmarkOnce(b: Benchmark): Int64 \ IO =
         let Benchmark(r) = b;
-        import java.lang.System:nanoTime();
+        import static java.lang.System.nanoTime(): Int64 \ IO;
         let t = nanoTime();
-        let _ = (r.f)();
+        (r.f)();
         (nanoTime() - t) / scaleFactor()
 
     ///
     /// Executes the given function `f` exactly `n` times.
     ///
-    def loop(f: Unit -> a, n: Int32): Unit & Impure =
+    def loop(f: Unit -> a \ ef, n: Int32): Unit \ ef =
         if (n == 0)
             ()
         else {
-            f() as & Impure;
+            discard f();
             loop(f, n - 1)
         }
 
@@ -143,19 +150,19 @@ namespace Benchmark {
         if (cost == 0i64)
             maxIterations()
         else
-            Int64.clampToInt32(budget / cost, minIterations(), maxIterations())
+            Int64.clampToInt32(min = minIterations(), max = maxIterations(), budget / cost)
 
     ///
     /// Prints the benchmark header.
     ///
-    def printHeader(): Unit & Impure = {
+    def printHeader(): Unit \ IO = {
         println("------------------------------ Running Benchmarks ------------------------------")
     }
 
     ///
     /// Prints the column names.
     ///
-    def printCols(): Unit & Impure = {
+    def printCols(): Unit \ IO = {
         let namePart = String.padRight(40, ' ', "Benchmark");
         let iterPart = String.padLeft(20, ' ', "Iterations");
         let timePart = String.padLeft(20, ' ', "Time (avg)");
@@ -165,8 +172,8 @@ namespace Benchmark {
     ///
     /// Prints information about the given benchmark result `s`.
     ///
-    def printRow(s: BenchmarkResult): Unit & Impure = {
-        let Success(r) = s;
+    def printRow(s: BenchmarkResult): Unit \ IO = {
+        let BenchmarkResult.Success(r) = s;
         let avgNs = r.total / Int32.toInt64(r.rounds);
         let avgMs = toMicroSeconds(avgNs);
         let namePart = String.padRight(40, ' ', r.name);

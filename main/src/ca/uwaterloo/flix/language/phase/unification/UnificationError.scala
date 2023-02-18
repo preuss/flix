@@ -97,14 +97,6 @@ object UnificationError {
   case class NonSchemaType(nonSchemaType: Type) extends UnificationError
 
   /**
-    * A unification error due to an mismatch in type variable kinds.
-    *
-    * @param kind1 the first kind.
-    * @param kind2 the second kind.
-    */
-  case class MismatchedKinds(kind1: Kind, kind2: Kind) extends UnificationError
-
-  /**
     * A unification error resulting from a type constraint with no matching instance.
     *
     * @param tconstr the type constraint.
@@ -117,5 +109,11 @@ object UnificationError {
     * @param tconstr the type constraint.
     */
   case class MultipleMatchingInstances(tconstr: Ast.TypeConstraint) extends UnificationError
+
+  /**
+    * A unification error to indicate that some hack was not applicable
+    */
+    // TODO RESTR-VARS
+  case class HackError(message: String) extends UnificationError
 
 }

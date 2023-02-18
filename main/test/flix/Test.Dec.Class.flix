@@ -6,30 +6,30 @@ namespace Test/Dec/Class {
 
     namespace Test02 {
 
-        lawless class X[a] {
+        class X[a] {
             pub def f(x: a): Bool
         }
 
     }
 
     namespace Test03 {
-        lawless class X[a] {
+        class X[a] {
             pub def f(x: a): Bool
         }
 
-        instance X[Int] {
-            pub def f(x: Int): Bool = x == 0
+        instance X[Int32] {
+            pub def f(x: Int32): Bool = x == 0
         }
 
-        pub def g(x: Int): Bool = Test/Dec/Class/Test03/X.f(x)
+        pub def g(x: Int32): Bool = Test/Dec/Class/Test03/X.f(x)
     }
 
     namespace Test04 {
-        lawless class C[a] {
+        class C[a] {
             pub def f(x: a): Bool
         }
 
-        lawless class D[a] {
+        class D[a] {
             pub def g(x: a): Bool
         }
 
@@ -37,7 +37,6 @@ namespace Test/Dec/Class {
     }
 
     namespace Test05 {
-        use Test/Dec/Class.List;
 
         class C[a]
 
@@ -45,16 +44,13 @@ namespace Test/Dec/Class {
     }
 
     namespace Test06 {
-        use Test/Dec/Class.List;
-        use Test/Dec/Class.List.Nil;
-        use Test/Dec/Class.Option;
 
-        pub lawless class C[a] {
+        pub class C[a] {
             pub def f(x: a): Bool
         }
 
-        instance C[Int] {
-            pub def f(x: Int): Bool = x == 0
+        instance C[Int32] {
+            pub def f(x: Int32): Bool = x == 0
         }
 
         instance C[List[a]] with C[a] {
@@ -66,21 +62,18 @@ namespace Test/Dec/Class {
             }
         }
 
-        pub def g(x: List[Int]): Bool = Test/Dec/Class/Test06/C.f(x)
+        pub def g(x: List[Int32]): Bool = Test/Dec/Class/Test06/C.f(x)
     }
 
     namespace Test07 {
-        use Test/Dec/Class/Test06.C;
+        use Test/Dec/Class/Test06.C
 
         pub def g(x: a): a with C[a] = x
     }
 
     namespace Test08 {
-        use Test/Dec/Class.Option;
-        use Test/Dec/Class.Option.None;
-        use Test/Dec/Class.Option.Some;
 
-        lawless class F[m : Type -> Type] {
+        class F[m : Type -> Type] {
             pub def map(f: a -> b, x: m[a]): m[b]
         }
 
@@ -93,35 +86,31 @@ namespace Test/Dec/Class {
     }
 
     namespace Test09 {
-        lawless class Eff[e : Bool] {
-            pub def isPure(f: a -> b & e): Bool
+        class Eff[ef : Bool] {
+            pub def isPure(f: a -> b \ ef): Bool
         }
 
         instance Eff[Pure] {
             pub def isPure(_f: a -> b): Bool = true
         }
-
-        instance Eff[Impure] {
-            pub def isPure(_f: a ~> b): Bool = false
-        }
     }
 
     namespace Test10 {
-        lawless class C[a] {
+        class C[a] {
             pub def f(x: a): Bool
         }
 
-        lawless class D[a] with C[a]
+        class D[a] with C[a]
 
-        lawless class E[a] with D[a]
+        class E[a] with D[a]
 
-        instance C[Int] {
-            pub def f(_x: Int): Bool = true
+        instance C[Int32] {
+            pub def f(_x: Int32): Bool = true
         }
 
-        instance D[Int]
+        instance D[Int32]
 
-        instance E[Int]
+        instance E[Int32]
 
         pub def g(x: a): Bool with D[a] = Test/Dec/Class/Test10/C.f(x)
 
@@ -129,20 +118,20 @@ namespace Test/Dec/Class {
     }
 
     namespace Test11 {
-        class C[a] {
+        lawful class C[a] {
             pub def f(x: a, y: a): Bool
 
             // TODO handle namespaces better
             law reflexivity: forall (x: a, y: a) . Test/Dec/Class/Test11/C.f(x, y) == Test/Dec/Class/Test11/C.f(y, x)
         }
 
-        instance C[Int] {
-            pub def f(_x: Int, _y: Int): Bool = true
+        instance C[Int32] {
+            pub def f(_x: Int32, _y: Int32): Bool = true
         }
     }
 
     namespace Test12 {
-        lawless class C[a] {
+        class C[a] {
             pub def f(): a
 
             law l: forall (_x: a) . true
@@ -154,7 +143,7 @@ namespace Test/Dec/Class {
     }
 
     namespace Test13 {
-        lawless class C[a] {
+        class C[a] {
             pub def f(): a
 
             pub def g(): a = Test/Dec/Class/Test13/C.f()
@@ -162,10 +151,10 @@ namespace Test/Dec/Class {
             pub def h(): a = Test/Dec/Class/Test13/C.g()
         }
 
-        instance C[Int] {
-            pub def f(): Int = 0
+        instance C[Int32] {
+            pub def f(): Int32 = 0
 
-            override pub def h(): Int = 1
+            override pub def h(): Int32 = 1
         }
 
         @test
@@ -179,33 +168,73 @@ namespace Test/Dec/Class {
     }
 
     namespace Test14 {
-        lawless class C[a] {
-            pub def c(x: a): Int
+        class C[a] {
+            pub def c(x: a): Int32
         }
 
-        lawless class D[a] with C[a] {
-            pub def d(x: a): Int
+        class D[a] with C[a] {
+            pub def d(x: a): Int32
         }
 
-        pub def f(x: a): Int with D[a] = Test/Dec/Class/Test14/C.c(x) + Test/Dec/Class/Test14/D.d(x)
+        pub def f(x: a): Int32 with D[a] = Test/Dec/Class/Test14/C.c(x) + Test/Dec/Class/Test14/D.d(x)
     }
 
     namespace Test15 {
-        lawless class C[a]
+        class C[a]
 
-        lawless class D[a]
+        class D[a]
 
         pub def f(x: a, y: b): Bool with C[a], D[b] = ???
     }
 
-    pub enum List[a] {
-        case Nil
-        case Cons(a, List[a])
+    namespace Test16 {
+        class D[a] {
+            pub def f(x: a, y: a): Bool
+        }
+
+        class C[a] {
+            law l: forall (x: a, y: a) with D[a] . Test/Dec/Class/Test16/D.f(x, y)
+        }
     }
 
-    pub enum Option[a] {
-        case None
-        case Some(a)
+    namespace Test17 {
+        class D[a] {
+            pub def f(x: a): Bool
+        }
+
+        class E[a: Type -> Type] {
+            law l: forall (x: a[b]) with D[a[b]] . Test/Dec/Class/Test17/D.f(x)
+        }
+    }
+
+    namespace Test18 {
+        pub enum E[_: Bool]
+        pub enum F[_: Bool, _: Type]
+
+        class C[a]
+        class D[a: Type -> Type]
+
+        instance C[E[true]]
+        instance C[F[false, a]]
+        instance D[F[true]]
+    }
+
+    namespace Test19 {
+        pub enum M[_: Bool, a: Type] {
+            case M(a)
+        }
+
+        instance Eq[M[true, a]] with Eq[a] {
+            pub def eq(x: M[true, a], y: M[true, a]): Bool = match (x, y) {
+                case (M.M(x1), M.M(y1)) => x1 == y1
+            }
+        }
+
+        @test
+        def testCallComplexBoolSig01(): Bool = M.M(10): M[true, Int32] == M.M(10): M[true, Int32]
+
+        @test
+        def testCallComplexBoolSig02(): Bool = M.M(10): M[true, Int32] != M.M(11): M[true, Int32]
     }
 
     @test

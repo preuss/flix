@@ -16,27 +16,22 @@
 
 package ca.uwaterloo.flix.language.ast
 
-import java.lang.reflect.{Constructor, Field, Method}
+import ca.uwaterloo.flix.language.ast.Ast.Source
 
-import ca.uwaterloo.flix.language.ast.Ast.{Denotation, Source}
+import java.lang.reflect.{Constructor, Field, Method}
 
 object FinalAst {
 
   case class Root(defs: Map[Symbol.DefnSym, FinalAst.Def],
                   enums: Map[Symbol.EnumSym, FinalAst.Enum],
-                  properties: List[FinalAst.Property],
-                  reachable: Set[Symbol.DefnSym],
+                  entryPoint: Option[Symbol.DefnSym],
                   sources: Map[Source, SourceLocation])
 
   case class Def(ann: Ast.Annotations, mod: Ast.Modifiers, sym: Symbol.DefnSym, formals: List[FinalAst.FormalParam], exp: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) {
     var method: Method = _
   }
 
-  case class Enum(mod: Ast.Modifiers, sym: Symbol.EnumSym, cases: Map[Name.Tag, FinalAst.Case], tpeDeprecated: MonoType, loc: SourceLocation)
-
-  case class Property(law: Symbol.DefnSym, defn: Symbol.DefnSym, exp: FinalAst.Expression) {
-    def loc: SourceLocation = defn.loc
-  }
+  case class Enum(ann: Ast.Annotations, mod: Ast.Modifiers, sym: Symbol.EnumSym, cases: Map[Symbol.CaseSym, FinalAst.Case], tpeDeprecated: MonoType, loc: SourceLocation)
 
   sealed trait Expression {
     def tpe: MonoType
@@ -46,60 +41,12 @@ object FinalAst {
 
   object Expression {
 
-    case class Unit(loc: SourceLocation) extends FinalAst.Expression {
-      final val tpe = MonoType.Unit
-    }
-
-    case class Null(tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
-
-    case class True(loc: SourceLocation) extends FinalAst.Expression {
-      final val tpe = MonoType.Bool
-    }
-
-    case class False(loc: SourceLocation) extends FinalAst.Expression {
-      final val tpe = MonoType.Bool
-    }
-
-    case class Char(lit: scala.Char, loc: SourceLocation) extends FinalAst.Expression {
-      final val tpe = MonoType.Char
-    }
-
-    case class Float32(lit: scala.Float, loc: SourceLocation) extends FinalAst.Expression {
-      final val tpe = MonoType.Float32
-    }
-
-    case class Float64(lit: scala.Double, loc: SourceLocation) extends FinalAst.Expression {
-      final val tpe = MonoType.Float64
-    }
-
-    case class Int8(lit: scala.Byte, loc: SourceLocation) extends FinalAst.Expression {
-      final val tpe = MonoType.Int8
-    }
-
-    case class Int16(lit: scala.Short, loc: SourceLocation) extends FinalAst.Expression {
-      final val tpe = MonoType.Int16
-    }
-
-    case class Int32(lit: scala.Int, loc: SourceLocation) extends FinalAst.Expression {
-      final val tpe = MonoType.Int32
-    }
-
-    case class Int64(lit: scala.Long, loc: SourceLocation) extends FinalAst.Expression {
-      final val tpe = MonoType.Int64
-    }
-
-    case class BigInt(lit: java.math.BigInteger, loc: SourceLocation) extends FinalAst.Expression {
-      final val tpe = MonoType.BigInt
-    }
-
-    case class Str(lit: java.lang.String, loc: SourceLocation) extends FinalAst.Expression {
-      final val tpe = MonoType.Str
-    }
+    case class Cst(cst: Ast.Constant, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
 
     case class Var(sym: Symbol.VarSym, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
 
     // TODO: Get rid of the fnMonoType here.
-    case class Closure(sym: Symbol.DefnSym, freeVars: List[FreeVar], fnMonoType: MonoType, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
+    case class Closure(sym: Symbol.DefnSym, closureArgs: List[FinalAst.Expression], tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
 
     case class ApplyClo(exp: FinalAst.Expression, args: List[FinalAst.Expression], tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
 
@@ -123,13 +70,21 @@ object FinalAst {
 
     case class Let(sym: Symbol.VarSym, exp1: FinalAst.Expression, exp2: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
 
-    case class Is(sym: Symbol.EnumSym, tag: Name.Tag, exp: FinalAst.Expression, loc: SourceLocation) extends FinalAst.Expression {
+    case class LetRec(varSym: Symbol.VarSym, index: Int, defSym: Symbol.DefnSym, exp1: FinalAst.Expression, exp2: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
+
+    case class Region(tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
+
+    case class Scope(sym: Symbol.VarSym, exp: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
+
+    case class ScopeExit(exp1: FinalAst.Expression, exp2: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
+
+    case class Is(sym: Symbol.CaseSym, exp: FinalAst.Expression, loc: SourceLocation) extends FinalAst.Expression {
       final val tpe: MonoType = MonoType.Bool
     }
 
-    case class Tag(sym: Symbol.EnumSym, tag: Name.Tag, exp: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
+    case class Tag(sym: Symbol.CaseSym, exp: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
 
-    case class Untag(sym: Symbol.EnumSym, tag: Name.Tag, exp: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
+    case class Untag(sym: Symbol.CaseSym, exp: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
 
     case class Index(base: FinalAst.Expression, offset: scala.Int, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
 
@@ -161,14 +116,6 @@ object FinalAst {
 
     case class Assign(exp1: FinalAst.Expression, exp2: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
 
-    case class Existential(fparam: FinalAst.FormalParam, exp: FinalAst.Expression, loc: SourceLocation) extends FinalAst.Expression {
-      def tpe: MonoType = MonoType.Bool
-    }
-
-    case class Universal(fparam: FinalAst.FormalParam, exp: FinalAst.Expression, loc: SourceLocation) extends FinalAst.Expression {
-      def tpe: MonoType = MonoType.Bool
-    }
-
     case class Cast(exp: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
 
     case class TryCatch(exp: FinalAst.Expression, rules: List[FinalAst.CatchRule], tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
@@ -187,15 +134,9 @@ object FinalAst {
 
     case class PutStaticField(field: Field, exp: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
 
-    case class NewChannel(exp: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
+    case class NewObject(name: String, clazz: java.lang.Class[_], tpe: MonoType, methods: List[FinalAst.JvmMethod], loc: SourceLocation) extends FinalAst.Expression
 
-    case class GetChannel(exp: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
-
-    case class PutChannel(exp1: FinalAst.Expression, exp2: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
-
-    case class SelectChannel(rules: List[FinalAst.SelectChannelRule], default: Option[FinalAst.Expression], tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
-
-    case class Spawn(exp: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
+    case class Spawn(exp1: FinalAst.Expression, exp2: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
 
     case class Lazy(exp: FinalAst.Expression, tpe: MonoType, loc: SourceLocation) extends FinalAst.Expression
 
@@ -207,14 +148,12 @@ object FinalAst {
 
   }
 
-  case class SelectChannelRule(sym: Symbol.VarSym, chan: FinalAst.Expression, exp: FinalAst.Expression)
+  case class Case(sym: Symbol.CaseSym, tpeDeprecated: MonoType, loc: SourceLocation)
 
-  case class Case(sym: Symbol.EnumSym, tag: Name.Tag, tpeDeprecated: MonoType, loc: SourceLocation)
+  case class JvmMethod(ident: Name.Ident, fparams: List[FinalAst.FormalParam], clo: FinalAst.Expression, retTpe: MonoType, loc: SourceLocation)
 
   case class CatchRule(sym: Symbol.VarSym, clazz: java.lang.Class[_], exp: FinalAst.Expression)
 
   case class FormalParam(sym: Symbol.VarSym, tpe: MonoType)
-
-  case class FreeVar(sym: Symbol.VarSym, tpe: MonoType)
 
 }

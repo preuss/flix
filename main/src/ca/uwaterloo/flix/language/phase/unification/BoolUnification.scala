@@ -16,65 +16,160 @@
 package ca.uwaterloo.flix.language.phase.unification
 
 import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.language.ast.Scheme.InstantiateMode
 import ca.uwaterloo.flix.language.ast._
 import ca.uwaterloo.flix.util.Result
-import ca.uwaterloo.flix.util.Result.{Err, Ok}
-
-import scala.annotation.tailrec
+import ca.uwaterloo.flix.util.Result.{Ok, ToErr, ToOk}
+import org.sosy_lab.pjbdd.api.DD
 
 object BoolUnification {
 
   /**
+    * The number of variables required before we switch to using BDDs for SVE.
+    */
+  private val DefaultThreshold: Int = 5
+
+  /**
     * Returns the most general unifier of the two given Boolean formulas `tpe1` and `tpe2`.
     */
-  def unify(tpe1: Type, tpe2: Type)(implicit flix: Flix): Result[Substitution, UnificationError] = {
-    ///
-    /// Return immediately if Boolean unification is disabled.
-    ///
-    if (flix.options.xnoboolunification)
-      return Ok(Substitution.empty)
+  def unify(tpe1: Type, tpe2: Type, renv0: RigidityEnv)(implicit flix: Flix): Result[Substitution, UnificationError] = {
 
-    ///
-    /// Perform aggressive matching to optimize for common cases.
-    ///
-    if (tpe1 eq tpe2) {
-      return Ok(Substitution.empty)
+    //
+    // NOTE: ALWAYS UNSOUND. USE ONLY FOR EXPERIMENTS.
+    //
+    if (flix.options.xnoboolunif){
+      return Substitution.empty.toOk
     }
 
-    tpe1 match {
-      case x: Type.Var if x.rigidity eq Rigidity.Flexible =>
-        if (tpe2 eq Type.True)
-          return Ok(Substitution.singleton(x, Type.True))
-        if (tpe2 eq Type.False)
-          return Ok(Substitution.singleton(x, Type.False))
-      case _ => // nop
+    //
+    // Optimize common unification queries.
+    //
+    if (flix.options.xprintboolunif) {
+      val loc = if (tpe1.loc != SourceLocation.Unknown) tpe1.loc else tpe2.loc
+      println(s"$loc: $tpe1 =?= $tpe2")
     }
 
-    tpe2 match {
-      case y: Type.Var if y.rigidity eq Rigidity.Flexible =>
-        if (tpe1 eq Type.True)
-          return Ok(Substitution.singleton(y, Type.True))
-        if (tpe1 eq Type.False)
-          return Ok(Substitution.singleton(y, Type.False))
-      case _ => // nop
+    if (!flix.options.xnoboolspecialcases) {
+
+      // Case 1: Unification of identical formulas.
+      if (tpe1 eq tpe2) {
+        return Ok(Substitution.empty)
+      }
+
+      // Case 2: Common unification instances.
+      // Note: Order determined by code coverage.
+      (tpe1, tpe2) match {
+        case (Type.Var(x, _), Type.Var(y, _)) =>
+          if (renv0.isFlexible(x)) {
+            return Ok(Substitution.singleton(x, tpe2)) // 9000 hits
+          }
+          if (renv0.isFlexible(y)) {
+            return Ok(Substitution.singleton(y, tpe1)) // 1000 hits
+          }
+          if (x == y) {
+            return Ok(Substitution.empty) // 1000 hits
+          }
+
+        case (Type.Cst(TypeConstructor.True, _), Type.Cst(TypeConstructor.True, _)) =>
+          return Ok(Substitution.empty) // 6000 hits
+
+        case (Type.Var(x, _), Type.Cst(tc, _)) if renv0.isFlexible(x) => tc match {
+          case TypeConstructor.True =>
+            return Ok(Substitution.singleton(x, Type.True)) // 9000 hits
+          case TypeConstructor.False =>
+            return Ok(Substitution.singleton(x, Type.False)) // 1000 hits
+          case _ => // nop
+        }
+
+        case (Type.Cst(tc, _), Type.Var(y, _)) if renv0.isFlexible(y) => tc match {
+          case TypeConstructor.True =>
+            return Ok(Substitution.singleton(y, Type.True)) // 7000 hits
+          case TypeConstructor.False =>
+            return Ok(Substitution.singleton(y, Type.False)) //  500 hits
+          case _ => // nop
+        }
+
+        case (Type.Cst(TypeConstructor.False, _), Type.Cst(TypeConstructor.False, _)) =>
+          return Ok(Substitution.empty) //  100 hits
+
+        case _ => // nop
+      }
+
     }
 
-    ///
-    /// Run the expensive boolean unification algorithm.
-    ///
-    booleanUnification(tpe1, tpe2)
+    // Choose the SVE implementation based on the number of variables.
+    val numberOfVars = (tpe1.typeVars ++ tpe2.typeVars).size
+    val threshold = flix.options.xbddthreshold.getOrElse(DefaultThreshold)
+
+    if (flix.options.xboolclassic) {
+      implicit val alg: BoolAlg[BoolFormula] = new BoolFormulaAlgClassic
+      implicit val cache: UnificationCache[BoolFormula] = UnificationCache.GlobalBool
+      lookupOrSolve(tpe1, tpe2, renv0)
+    } else if (numberOfVars < threshold) {
+      implicit val alg: BoolAlg[BoolFormula] = new BoolFormulaAlg
+      implicit val cache: UnificationCache[BoolFormula] = UnificationCache.GlobalBool
+      lookupOrSolve(tpe1, tpe2, renv0)
+    } else {
+      implicit val alg: BoolAlg[DD] = new BddFormulaAlg
+      implicit val cache: UnificationCache[DD] = UnificationCache.GlobalBdd
+      lookupOrSolve(tpe1, tpe2, renv0)
+    }
+  }
+
+  /**
+    * Lookup the unifier of `tpe1` and `tpe2` or solve them.
+    */
+  private def lookupOrSolve[F](tpe1: Type, tpe2: Type, renv0: RigidityEnv)
+                              (implicit flix: Flix, alg: BoolAlg[F], cache: UnificationCache[F]): Result[Substitution, UnificationError] = {
+    //
+    // Translate the types into formulas.
+    //
+    val env = alg.getEnv(List(tpe1, tpe2))
+    val f1 = alg.fromType(tpe1, env)
+    val f2 = alg.fromType(tpe2, env)
+
+    val renv = alg.liftRigidityEnv(renv0, env)
+
+    //
+    // Lookup the query to see if it is already in unification cache.
+    //
+    if (!flix.options.xnoboolcache) {
+      cache.lookup(f1, f2, renv) match {
+        case None => // cache miss: must compute the unification.
+        case Some(subst) =>
+          // cache hit: return the found substitution.
+          return subst.toTypeSubstitution(env).toOk
+      }
+    }
+
+    //
+    // Run the expensive Boolean unification algorithm.
+    //
+    booleanUnification(f1, f2, renv) match {
+      case None => UnificationError.MismatchedBools(tpe1, tpe2).toErr
+      case Some(subst) =>
+        if (!flix.options.xnoboolcache) {
+          cache.put(f1, f2, renv, subst)
+        }
+        subst.toTypeSubstitution(env).toOk
+    }
   }
 
   /**
     * Returns the most general unifier of the two given Boolean formulas `tpe1` and `tpe2`.
     */
-  private def booleanUnification(tpe1: Type, tpe2: Type)(implicit flix: Flix): Result[Substitution, UnificationError] = {
+  private def booleanUnification[F](tpe1: F, tpe2: F, renv: Set[Int])
+                                   (implicit flix: Flix, alg: BoolAlg[F]): Option[BoolSubstitution[F]] = {
     // The boolean expression we want to show is 0.
-    val query = mkEq(tpe1, tpe2)
+    val query = alg.mkXor(tpe1, tpe2)
 
-    // The free and flexible type variables in the query.
-    val freeVars = query.typeVars.toList.filter(_.rigidity == Rigidity.Flexible)
+    // Compute the variables in the query.
+    val typeVars = alg.freeVars(query).toList
+
+    // Compute the flexible variables.
+    val flexibleTypeVars = typeVars.filterNot(renv.contains)
+
+    // Determine the order in which to eliminate the variables.
+    val freeVars = computeVariableOrder(flexibleTypeVars)
 
     // Eliminate all variables.
     try {
@@ -89,268 +184,51 @@ object BoolUnification {
       //      }
       //    }
 
-      Ok(subst)
+      Some(subst)
     } catch {
-      case BooleanUnificationException => Err(UnificationError.MismatchedBools(tpe1, tpe2))
+      case ex: BoolUnificationException => None
     }
+  }
+
+  /**
+    * A heuristic used to determine the order in which to eliminate variable.
+    *
+    * Semantically the order of variables is immaterial. Changing the order may
+    * yield different unifiers, but they are all equivalent. However, changing
+    * the can lead to significant speed-ups / slow-downs.
+    *
+    * We make the following observation:
+    *
+    * We want to have synthetic variables (i.e. fresh variables introduced during
+    * type inference) expressed in terms of real variables (i.e. variables that
+    * actually occur in the source code). We can ensure this by eliminating the
+    * synthetic variables first.
+    */
+  private def computeVariableOrder(l: List[Int]): List[Int] = {
+    l.reverse // TODO have to reverse the order for regions to work
   }
 
   /**
     * Performs success variable elimination on the given boolean expression `f`.
+    *
+    * `flexvs` is the list of remaining flexible variables in the expression.
     */
-  private def successiveVariableElimination(f: Type, fvs: List[Type.Var])(implicit flix: Flix): Substitution = fvs match {
+  private def successiveVariableElimination[F](f: F, flexvs: List[Int])(implicit flix: Flix, alg: BoolAlg[F]): BoolSubstitution[F] = flexvs match {
     case Nil =>
       // Determine if f is unsatisfiable when all (rigid) variables are made flexible.
-      val (_, q) = Scheme.instantiate(Scheme(f.typeVars.toList, List.empty, f), InstantiateMode.Flexible)
-      if (!satisfiable(q))
-        Substitution.empty
+      if (!alg.satisfiable(f))
+        BoolSubstitution.empty
       else
-        throw BooleanUnificationException
+        throw BoolUnificationException()
 
     case x :: xs =>
-      val t0 = Substitution.singleton(x, Type.False)(f)
-      val t1 = Substitution.singleton(x, Type.True)(f)
-      val se = successiveVariableElimination(mkAnd(t0, t1), xs)
-      val st = Substitution.singleton(x, mkOr(se(t0), mkAnd(Type.freshVar(Kind.Bool), mkNot(se(t1)))))
+      val t0 = BoolSubstitution.singleton(x, alg.mkFalse)(f)
+      val t1 = BoolSubstitution.singleton(x, alg.mkTrue)(f)
+      val se = successiveVariableElimination(alg.mkAnd(t0, t1), xs)
+
+      val f1 = alg.minimize(alg.mkOr(se(t0), alg.mkAnd(alg.mkVar(x), alg.mkNot(se(t1)))))
+      val st = BoolSubstitution.singleton(x, f1)
       st ++ se
-  }
-
-  /**
-    * An exception thrown to indicate that boolean unification failed.
-    */
-  private case object BooleanUnificationException extends RuntimeException
-
-  /**
-    * Returns `true` if the given boolean formula `f` is satisfiable.
-    */
-  private def satisfiable(f: Type)(implicit flix: Flix): Boolean = f match {
-    case Type.True => true
-    case Type.False => false
-    case _ =>
-      val q = mkEq(f, Type.True)
-      try {
-        successiveVariableElimination(q, q.typeVars.toList)
-        true
-      } catch {
-        case BooleanUnificationException => false
-      }
-  }
-
-
-  /**
-    * To unify two Boolean formulas p and q it suffices to unify t = (p ∧ ¬q) ∨ (¬p ∧ q) and check t = 0.
-    */
-  private def mkEq(p: Type, q: Type): Type = mkOr(mkAnd(p, mkNot(q)), mkAnd(mkNot(p), q))
-
-  /**
-    * Returns the negation of the Boolean formula `tpe0`.
-    */
-  // NB: The order of cases has been determined by code coverage analysis.
-  def mkNot(tpe0: Type): Type = tpe0 match {
-    case Type.True =>
-      Type.False
-
-    case Type.False =>
-      Type.True
-
-    case NOT(x) =>
-      x
-
-    // ¬(¬x ∨ y) => x ∧ ¬y
-    case OR(NOT(x), y) =>
-      mkAnd(x, mkNot(y))
-
-    // ¬(x ∨ ¬y) => ¬x ∧ y
-    case OR(x, NOT(y)) =>
-      mkAnd(mkNot(x), y)
-
-    case _ => Type.Apply(Type.Not, tpe0)
-  }
-
-  /**
-    * Returns the conjunction of the two Boolean formulas `tpe1` and `tpe2`.
-    */
-  // NB: The order of cases has been determined by code coverage analysis.
-  @tailrec
-  def mkAnd(tpe1: Type, tpe2: Type): Type = (tpe1, tpe2) match {
-    // T ∧ x => x
-    case (Type.True, _) =>
-      tpe2
-
-    // x ∧ T => x
-    case (_, Type.True) =>
-      tpe1
-
-    // F ∧ x => F
-    case (Type.False, _) =>
-      Type.False
-
-    // x ∧ F => F
-    case (_, Type.False) =>
-      Type.False
-
-    // ¬x ∧ (x ∨ y) => ¬x ∧ y
-    case (NOT(x1), OR(x2, y)) if x1 == x2 =>
-      mkAnd(mkNot(x1), y)
-
-    // x ∧ ¬x => F
-    case (x1, NOT(x2)) if x1 == x2 =>
-      Type.False
-
-    // ¬x ∧ x => F
-    case (NOT(x1), x2) if x1 == x2 =>
-      Type.False
-
-    // x ∧ (x ∧ y) => (x ∧ y)
-    case (x1, AND(x2, y)) if x1 == x2 =>
-      mkAnd(x1, y)
-
-    // x ∧ (y ∧ x) => (x ∧ y)
-    case (x1, AND(y, x2)) if x1 == x2 =>
-      mkAnd(x1, y)
-
-    // (x ∧ y) ∧ x) => (x ∧ y)
-    case (AND(x1, y), x2) if x1 == x2 =>
-      mkAnd(x1, y)
-
-    // (x ∧ y) ∧ y) => (x ∧ y)
-    case (AND(x, y1), y2) if y1 == y2 =>
-      mkAnd(x, y1)
-
-    // x ∧ (x ∨ y) => x
-    case (x1, OR(x2, _)) if x1 == x2 =>
-      x1
-
-    // (x ∨ y) ∧ x => x
-    case (OR(x1, _), x2) if x1 == x2 =>
-      x1
-
-    // x ∧ (y ∧ ¬x) => F
-    case (x1, AND(_, NOT(x2))) if x1 == x2 =>
-      Type.False
-
-    // (¬x ∧ y) ∧ x => F
-    case (AND(NOT(x1), _), x2) if x1 == x2 =>
-      Type.False
-
-    // x ∧ ¬(x ∨ y) => F
-    case (x1, NOT(OR(x2, _))) if x1 == x2 =>
-      Type.False
-
-    // ¬(x ∨ y) ∧ x => F
-    case (NOT(OR(x1, _)), x2) if x1 == x2 =>
-      Type.False
-
-    // x ∧ (¬x ∧ y) => F
-    case (x1, AND(NOT(x2), _)) if x1 == x2 =>
-      Type.False
-
-    // (¬x ∧ y) ∧ x => F
-    case (AND(NOT(x1), _), x2) if x1 == x2 =>
-      Type.False
-
-    // x ∧ x => x
-    case _ if tpe1 == tpe2 => tpe1
-
-    case _ =>
-      //      val s = s"And($eff1, $eff2)"
-      //      val len = s.length
-      //      if (true) {
-      //        println(s.substring(0, Math.min(len, 300)))
-      //      }
-
-      Type.Apply(Type.Apply(Type.And, tpe1), tpe2)
-  }
-
-  /**
-    * Returns the disjunction of the two Boolean formulas `tpe1` and `tpe2`.
-    */
-  // NB: The order of cases has been determined by code coverage analysis.
-  @tailrec
-  def mkOr(tpe1: Type, tpe2: Type): Type = (tpe1, tpe2) match {
-    // T ∨ x => T
-    case (Type.True, _) =>
-      Type.True
-
-    // F ∨ y => y
-    case (Type.False, _) =>
-      tpe2
-
-    // x ∨ T => T
-    case (_, Type.True) =>
-      Type.True
-
-    // x ∨ F => x
-    case (_, Type.False) =>
-      tpe1
-
-    // x ∨ (y ∨ x) => x ∨ y
-    case (x1, OR(y, x2)) if x1 == x2 =>
-      mkOr(x1, y)
-
-    // (x ∨ y) ∨ x => x ∨ y
-    case (OR(x1, y), x2) if x1 == x2 =>
-      mkOr(x1, y)
-
-    // ¬x ∨ x => T
-    case (NOT(x), y) if x == y =>
-      Type.True
-
-    // x ∨ ¬x => T
-    case (x, NOT(y)) if x == y =>
-      Type.True
-
-    // (¬x ∨ y) ∨ x) => T
-    case (OR(NOT(x), _), y) if x == y =>
-      Type.True
-
-    // x ∨ (¬x ∨ y) => T
-    case (x, OR(NOT(y), _)) if x == y =>
-      Type.True
-
-    // x ∨ (y ∧ x) => x
-    case (x1, AND(_, x2)) if x1 == x2 => x1
-
-    // (y ∧ x) ∨ x => x
-    case (AND(_, x1), x2) if x1 == x2 => x1
-
-    // x ∨ x => x
-    case _ if tpe1 == tpe2 =>
-      tpe1
-
-    case _ =>
-
-      //              val s = s"Or($eff1, $eff2)"
-      //              val len = s.length
-      //              if (len > 30) {
-      //                println(s.substring(0, Math.min(len, 300)))
-      //              }
-
-      Type.Apply(Type.Apply(Type.Or, tpe1), tpe2)
-  }
-
-  private object NOT {
-    @inline
-    def unapply(tpe: Type): Option[Type] = tpe match {
-      case Type.Apply(Type.Cst(TypeConstructor.Not, _), x) => Some(x)
-      case _ => None
-    }
-  }
-
-  private object AND {
-    @inline
-    def unapply(tpe: Type): Option[(Type, Type)] = tpe match {
-      case Type.Apply(Type.Apply(Type.Cst(TypeConstructor.And, _), x), y) => Some((x, y))
-      case _ => None
-    }
-  }
-
-  private object OR {
-    @inline
-    def unapply(tpe: Type): Option[(Type, Type)] = tpe match {
-      case Type.Apply(Type.Apply(Type.Cst(TypeConstructor.Or, _), x), y) => Some((x, y))
-      case _ => None
-    }
   }
 
 }

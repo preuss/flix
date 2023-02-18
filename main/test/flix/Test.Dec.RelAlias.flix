@@ -39,16 +39,19 @@ namespace Test/Dec/RelAlias {
     @test
     def testDecRel13(): Unit = f(#{ A(21). B(true, 42). C(true, true). })
 
+    @test
+    def testDecRel14(): Unit = f(#{ A(21). B(true, 42). C(true, true). } : Z[#( A, B, C[Bool] )])
+
     def f(_: Z[_]): Unit = ()
 
-    rel A(x: Int)
-    rel B(x: Bool, y: Int)
+    rel A(x: Int32)
+    rel B(x: Bool, y: Int32)
     rel C[a](x: a, y: a)
 
     type alias X = #{ A, B }
 
     type alias Y = #{ A, B, C[Bool] }
 
-    type alias Z[r] = #{ A | r }
+    type alias Z[r: SchemaRow] = #{ A | r }
 
 }

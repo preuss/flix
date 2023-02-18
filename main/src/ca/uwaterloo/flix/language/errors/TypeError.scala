@@ -16,21 +16,21 @@
 
 package ca.uwaterloo.flix.language.errors
 
-import ca.uwaterloo.flix.language.CompilationError
+import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.CompilationMessage
 import ca.uwaterloo.flix.language.ast._
-import ca.uwaterloo.flix.language.debug.{Audience, FormatScheme, FormatType, TypeDiff}
-import ca.uwaterloo.flix.util.vt.VirtualString._
-import ca.uwaterloo.flix.util.vt._
+import ca.uwaterloo.flix.language.fmt.FormatType.formatType
+import ca.uwaterloo.flix.language.fmt._
+import ca.uwaterloo.flix.util.{Formatter, Grammar}
 
 /**
   * A common super-type for type errors.
   */
-sealed trait TypeError extends CompilationError {
-  def kind: String = "Type Error"
+sealed trait TypeError extends CompilationMessage {
+  val kind: String = "Type Error"
 }
 
 object TypeError {
-  implicit val audience: Audience = Audience.External
 
   /**
     * Generalization Error.
@@ -39,20 +39,185 @@ object TypeError {
     * @param inferred the inferred type scheme.
     * @param loc      the location where the error occurred.
     */
-  case class GeneralizationError(declared: Scheme, inferred: Scheme, loc: SourceLocation) extends TypeError {
-    def summary: String = s"The type scheme '${FormatScheme.formatScheme(inferred)}' cannot be generalized to '${FormatScheme.formatScheme(declared)}'."
+  case class GeneralizationError(declared: Scheme, inferred: Scheme, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"The type scheme '${FormatScheme.formatSchemeWithoutConstraints(inferred)}' cannot be generalized to '${FormatScheme.formatSchemeWithoutConstraints(declared)}'."
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal()
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> The type scheme: '" << Red(FormatScheme.formatScheme(inferred)) << "' cannot be generalized to '" << Red(FormatScheme.formatScheme(declared)) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "unable to generalize the type scheme.") << NewLine
-      vt << NewLine
-      vt << s"  Declared: " << Cyan(FormatScheme.formatScheme(declared)) << NewLine
-      vt << s"  Inferred: " << Magenta(FormatScheme.formatScheme(inferred)) << NewLine
-      vt
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> The type scheme: '${red(FormatScheme.formatSchemeWithoutConstraints(inferred))}' cannot be generalized to '${red(FormatScheme.formatSchemeWithoutConstraints(declared))}'.
+         |
+         |${code(loc, "unable to generalize the type scheme.")}
+         |
+         |The declared type does not match the inferred type:
+         |
+         |  Declared: ${cyan(FormatScheme.formatSchemeWithoutConstraints(declared))}
+         |  Inferred: ${magenta(FormatScheme.formatSchemeWithoutConstraints(inferred))}
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      val newLineAndIndent: String = System.lineSeparator() + "  "
+
+      def fmtTypeVar(tvar: Symbol.KindedTypeVarSym, declared: Boolean): String = {
+        val color = if (declared) formatter.cyan _ else formatter.magenta _
+        s"${color(FormatType.formatTypeVarSym(tvar))} of kind: '${FormatKind.formatKind(tvar.kind)}'."
+      }
+
+      def fmtQuantifiers(quantifiers: List[Symbol.KindedTypeVarSym], declared: Boolean): String = {
+        if (quantifiers.isEmpty)
+          "<< no type variables >>"
+        else
+          quantifiers.map(fmtTypeVar(_, declared)).mkString(newLineAndIndent)
+      }
+
+      s"""
+         |The declared type variables:
+         |  ${fmtQuantifiers(declared.quantifiers, declared = true)}
+         |
+         |The inferred type variables:
+         |  ${fmtQuantifiers(inferred.quantifiers, declared = false)}
+         |""".stripMargin
+    })
+  }
+
+  /**
+    * Effect Generalization Error.
+    *
+    * @param declared the declared effect.
+    * @param inferred the inferred effect.
+    * @param loc      the location where the error occurred.
+    */
+  case class EffectGeneralizationError(declared: Type, inferred: Type, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"The inferred effect '${FormatEff.formatEff(inferred)}' cannot be generalized to '${FormatEff.formatEff(declared)}'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> The inferred effect: '${red(FormatEff.formatEff(inferred))}' cannot be generalized to '${red(FormatEff.formatEff(declared))}'.
+         |
+         |${code(loc, "unable to generalize the effect.")}
+         |
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = None
+  }
+
+  /**
+    * Impure function declared as pure.
+    *
+    * @param loc the location where the error occurred.
+    */
+  case class ImpureDeclaredAsPure(loc: SourceLocation) extends TypeError {
+    def summary: String = "Impure function declared as pure."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> ${red("Impure")} function declared as ${green("pure")}.
+         |
+         |${code(loc, "impure function.")}
+         |
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      """A function whose body is impure must be declared as so.
+        |
+        |For example:
+        |
+        |  def example(): Unit \ IO = println("hello")
+        |                      ^^^^
+        |""".stripMargin
+    })
+  }
+
+  /**
+    * Effect polymorphic function declared as pure.
+    *
+    * @param inferred the inferred effect.
+    * @param loc      the location where the error occurred.
+    */
+  case class EffectPolymorphicDeclaredAsPure(inferred: Type, loc: SourceLocation) extends TypeError {
+    def summary: String = "Effect polymorphic function declared as pure."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> ${red("Effect polymorphic")} function declared as ${green("pure")}.
+         |
+         |${code(loc, "effect polymorphic function.")}
+         |
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      """A function whose body is effect polymorphic must be declared as so.
+        |
+        |For example:
+        |
+        |  def example(f: Int32 -> Int32 \ ef): Int32 \ ef = f(123)
+        |                                             ^^^^
+        |""".stripMargin
+    })
+  }
+
+  /**
+    * Unexpected Type.
+    *
+    * @param expected the expected type.
+    * @param inferred the inferred type.
+    * @param renv     the rigidity environment.
+    * @param loc      the location of the inferred type.
+    */
+  case class UnexpectedType(expected: Type, inferred: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"Expected type '${formatType(expected, Some(renv))}' but found type: '${formatType(inferred, Some(renv))}'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Expected type: '${red(formatType(expected, Some(renv)))}' but found type: '${red(formatType(inferred, Some(renv)))}'.
+         |
+         |${code(loc, "expression has unexpected type.")}
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = None
+  }
+
+  /**
+    * Unexpected type, but upcast might work.
+    *
+    * @param expected the expected type.
+    * @param inferred the inferred type.
+    * @param renv     the rigidity environment.
+    * @param loc      the location of the inferred type.
+    */
+  case class PossibleUpcast(expected: Type, inferred: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"Expected type '${formatType(expected, Some(renv))}' but found type: '${formatType(inferred, Some(renv))}'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""
+         |>> Expected type: '${red(formatType(expected, Some(renv)))}' but found type: '${red(formatType(inferred, Some(renv)))}'.
+         |
+         |${code(loc, "expression has unexpected type.")}
+         |
+         |'${formatType(expected, Some(renv))}' appears to be assignable from '${formatType(inferred, Some(renv))}'.
+         |Consider using 'upcast'?
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some(
+      s"""Flix does not support sub-typing nor sub-effecting.
+         |
+         |Nevertheless, 'upcast' is way to use both in a safe manner, for example:
+         |
+         |    let s = "Hello World";
+         |    let o: ##java.lang.Object = upcast s;
+         |""".stripMargin
+    )
   }
 
   /**
@@ -62,21 +227,67 @@ object TypeError {
     * @param baseType2 the second base type.
     * @param fullType1 the first full type.
     * @param fullType2 the second full type.
+    * @param renv      the rigidity environment.
     * @param loc       the location where the error occurred.
     */
-  case class MismatchedTypes(baseType1: Type, baseType2: Type, fullType1: Type, fullType2: Type, loc: SourceLocation) extends TypeError {
-    def summary: String = s"Unable to unify the types '$fullType1' and '$fullType2'."
+  case class MismatchedTypes(baseType1: Type, baseType2: Type, fullType1: Type, fullType2: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"Unable to unify the types '${formatType(fullType1, Some(renv))}' and '${formatType(fullType2, Some(renv))}'."
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal()
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Unable to unify the types: '" << Red(FormatType.formatType(baseType1)) << "' and '" << Red(FormatType.formatType(baseType2)) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "mismatched types.") << NewLine
-      vt << NewLine
-      vt << "Type One: " << FormatType.formatTypeDiff(TypeDiff.diff(fullType1, fullType2), Cyan) << NewLine
-      vt << "Type Two: " << FormatType.formatTypeDiff(TypeDiff.diff(fullType2, fullType1), Magenta) << NewLine
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Unable to unify the types: '${red(formatType(baseType1, Some(renv)))}' and '${red(formatType(baseType2, Some(renv)))}'.
+         |
+         |${code(loc, "mismatched types.")}
+         |
+         |Type One: ${formatType(fullType1, Some(renv))}
+         |Type Two: ${formatType(fullType2, Some(renv))}
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = None
+  }
+
+  /**
+    * Over-applied Function.
+    *
+    * @param excessArgument the type of the excess argument.
+    * @param loc            the location where the error occurred.
+    */
+  case class OverApplied(excessArgument: Type, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"Over-applied function. Excess argument of type: '${formatType(excessArgument)}'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Over-applied function. Excess argument of type: '${red(formatType(excessArgument))}'.
+         |
+         |${code(loc, "over-applied function.")}
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = None
+  }
+
+  /**
+    * Under-applied Function.
+    *
+    * @param missingArgument the type of the missing argument.
+    * @param loc             the location where the error occurred.
+    */
+  case class UnderApplied(missingArgument: Type, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"Under-applied function. Missing argument of type: '${formatType(missingArgument)}'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Under-applied function. Missing argument of type: '${red(formatType(missingArgument))}'.
+         |
+         |${code(loc, "under-applied function.")}
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
@@ -84,62 +295,55 @@ object TypeError {
     *
     * @param baseType1 the first boolean formula.
     * @param baseType2 the second boolean formula.
-    * @param fullType1 the first optional full type in which the first boolean formula occurs.
-    * @param fullType2 the second optional full type in which the second boolean formula occurs.
+    * @param fullType1 the first full type in which the first boolean formula occurs.
+    * @param fullType2 the second full type in which the second boolean formula occurs.
+    * @param renv      the rigidity environment.
     * @param loc       the location where the error occurred.
     */
-  case class MismatchedBools(baseType1: Type, baseType2: Type, fullType1: Option[Type], fullType2: Option[Type], loc: SourceLocation) extends TypeError {
-    def summary: String = s"Unable to unify the Boolean formulas '$baseType1' and '$baseType2'."
+  case class MismatchedBools(baseType1: Type, baseType2: Type, fullType1: Type, fullType2: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"Unable to unify the Boolean formulas '${formatType(baseType1, Some(renv))}' and '${formatType(baseType2, Some(renv))}'."
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal()
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Unable to unify the Boolean formulas: '" << Red(FormatType.formatType(baseType1)) << "' and '" << Red(FormatType.formatType(baseType2)) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "mismatched boolean formulas.") << NewLine
-      (fullType1, fullType2) match {
-        case (Some(ft1), Some(ft2)) =>
-          vt << "Type One: " << Cyan(FormatType.formatType(ft1)) << NewLine
-          vt << "Type Two: " << Magenta(FormatType.formatType(ft2)) << NewLine
-          vt << NewLine
-        case _ => // nop
-      }
-      vt << "If the Boolean formula describes purity:" << NewLine
-      vt << NewLine
-      vt << "  (1) Did you forget to mark the function as impure?" << NewLine
-      vt << "  (2) Are you trying to pass a pure function where an impure is required?" << NewLine
-      vt << "  (3) Are you trying to pass an impure function where a pure is required?" << NewLine
-      vt << NewLine
-      vt << "If the Boolean formula describes nullability:" << NewLine
-      vt << NewLine
-      vt << "  (1) Are you trying to pass null where a non-null value is required?" << NewLine
-      vt << NewLine
-      vt
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Unable to unify the Boolean formulas: '${red(formatType(baseType1, Some(renv)))}' and '${red(formatType(baseType2, Some(renv)))}'.
+         |
+         |${code(loc, "mismatched boolean formulas.")}
+         |
+         |Type One: ${cyan(formatType(fullType1, Some(renv)))}
+         |Type Two: ${magenta(formatType(fullType2, Some(renv)))}
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
-    * Mismatched kinds.
+    * Mismatched Pure and Effectful Arrows.
     *
-    * @param tpe1  the first type.
-    * @param tpe2  the second type.
-    * @param kind1 the first kind.
-    * @param kind2 the second kind.
-    * @param loc   the location where the error occurred.
+    * @param baseType1 the first boolean formula.
+    * @param baseType2 the second boolean formula.
+    * @param fullType1 the first full type in which the first boolean formula occurs.
+    * @param fullType2 the second full type in which the second boolean formula occurs.
+    * @param renv      the rigidity environment.
+    * @param loc       the location where the error occurred.
     */
-  case class MismatchedKinds(tpe1: Type, tpe2: Type, kind1: Kind, kind2: Kind, loc: SourceLocation) extends TypeError {
-    def summary: String = s"Unable to unify the kinds '$kind1' and '$kind2'.'"
+  case class MismatchedArrowBools(baseType1: Type, baseType2: Type, fullType1: Type, fullType2: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"Mismatched Pure and Effectful Functions."
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal()
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Unable to unify the types: '" << Red(FormatType.formatType(tpe1)) << "' and '" << Red(FormatType.formatType(tpe2)) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "mismatched kinds.") << NewLine
-      vt << NewLine
-      vt << "Kind One: " << Cyan(kind1.toString) << NewLine
-      vt << "Kind Two: " << Magenta(kind2.toString) << NewLine
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Mismatched Pure and Effectful Functions.
+         |
+         |${code(loc, "mismatched pure and effectful functions.")}
+         |
+         |Type One: ${cyan(formatType(fullType1, Some(renv)))}
+         |Type Two: ${magenta(formatType(fullType2, Some(renv)))}
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
@@ -147,18 +351,23 @@ object TypeError {
     *
     * @param tpe1 the first type.
     * @param tpe2 the second type.
+    * @param renv the rigidity environment.
     * @param loc  the location where the error occurred.
     */
-  case class MismatchedArity(tpe1: Type, tpe2: Type, loc: SourceLocation) extends TypeError {
-    def summary: String = s"Unable to unify the types '$tpe1' and '$tpe2'."
+  case class MismatchedArity(tpe1: Type, tpe2: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"Unable to unify the types '${formatType(tpe1, Some(renv))}' and '${formatType(tpe2, Some(renv))}'."
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal()
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Unable to unify the types: '" << Red(FormatType.formatType(tpe1)) << "' and '" << Red(FormatType.formatType(tpe2)) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "mismatched arity of types.") << NewLine
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Unable to unify the types: '${red(formatType(tpe1, Some(renv)))}' and '${red(formatType(tpe2, Some(renv)))}'.
+         |
+         |${code(loc, "mismatched arity of types.")}
+         |
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
@@ -168,22 +377,27 @@ object TypeError {
     * @param baseType  the base type.
     * @param fullType1 the first full type.
     * @param fullType2 the second full type.
+    * @param renv      the rigidity environment.
     * @param loc       the location where the error occurred.
     */
-  case class OccursCheckError(baseVar: Type.Var, baseType: Type, fullType1: Type, fullType2: Type, loc: SourceLocation) extends TypeError {
+  case class OccursCheckError(baseVar: Type.Var, baseType: Type, fullType1: Type, fullType2: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
     def summary: String = s"Unable to unify the type variable '$baseVar' with the type '$baseType'."
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal()
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Unable to unify the type variable '" << Red(baseVar.toString) << "' with the type '" << Red(FormatType.formatType(baseType)) << "'." << NewLine
-      vt << ">> The type variable occurs recursively within the type." << NewLine
-      vt << NewLine
-      vt << Code(loc, "mismatched types.") << NewLine
-      vt << NewLine
-      vt << "Type One: " << FormatType.formatTypeDiff(TypeDiff.diff(fullType1, fullType2), Cyan) << NewLine
-      vt << "Type Two: " << FormatType.formatTypeDiff(TypeDiff.diff(fullType2, fullType1), Magenta) << NewLine
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Unable to unify the type variable '${red(formatType(baseVar, Some(renv)))}' with the type '${red(formatType(baseType, Some(renv)))}'.
+         |
+         |>> The type variable occurs recursively within the type.
+         |
+         |${code(loc, "mismatched types.")}
+         |
+         |Type One: ${formatType(fullType1, Some(renv))}
+         |Type Two: ${formatType(fullType2, Some(renv))}
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
@@ -192,23 +406,28 @@ object TypeError {
     * @param field      the name of the missing field.
     * @param fieldType  the type of the missing field.
     * @param recordType the record type where the field is missing.
+    * @param renv       the rigidity environment.
     * @param loc        the location where the error occurred.
     */
-  case class UndefinedField(field: Name.Field, fieldType: Type, recordType: Type, loc: SourceLocation) extends TypeError {
+  case class UndefinedField(field: Name.Field, fieldType: Type, recordType: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
     def summary: String = s"Missing field '$field' of type '$fieldType'."
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal()
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Missing field '" << Red(field.name) << "' of type '" << Cyan(FormatType.formatType(fieldType)) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "missing field.") << NewLine
-      vt << "The record type: " << Indent << NewLine
-      vt << NewLine
-      vt << FormatType.formatType(recordType) << NewLine
-      vt << Dedent << NewLine
-      vt << "does not contain the field '" << Red(field.name) << "' of type " << Cyan(FormatType.formatType(fieldType)) << "." << NewLine
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Missing field '${red(field.name)}' of type '${cyan(formatType(fieldType, Some(renv)))}'.
+         |
+         |${code(loc, "missing field.")}
+         |
+         |The record type:
+         |
+         |  ${formatType(recordType, Some(renv))}
+         |
+         |does not contain the field '${red(field.name)}' of type ${cyan(formatType(fieldType, Some(renv)))}.
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
@@ -217,109 +436,371 @@ object TypeError {
     * @param pred       the missing predicate.
     * @param predType   the type of the missing predicate.
     * @param schemaType the schema type where the predicate is missing.
+    * @param renv       the rigidity environment.
     * @param loc        the location where the error occurred.
     */
-  case class UndefinedPredicate(pred: Name.Pred, predType: Type, schemaType: Type, loc: SourceLocation) extends TypeError {
+  case class UndefinedPredicate(pred: Name.Pred, predType: Type, schemaType: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
     def summary: String = s"Missing predicate '${pred.name}' of type '$predType'."
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal()
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Missing predicate '" << Red(pred.name) << "' of type '" << Cyan(FormatType.formatType(predType)) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "missing predicate.") << NewLine
-      vt << "The schema type: " << Indent << NewLine
-      vt << NewLine
-      vt << FormatType.formatType(schemaType) << NewLine
-      vt << Dedent << NewLine
-      vt << "does not contain the predicate '" << Red(pred.name) << "' of type " << Cyan(FormatType.formatType(predType)) << "." << NewLine
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Missing predicate '${red(pred.name)}' of type '${cyan(formatType(predType, Some(renv)))}'.
+         |
+         |${code(loc, "missing predicate.")}
+         |
+         |The schema type:
+         |
+         |  ${formatType(schemaType, Some(renv))}
+         |
+         |does not contain the predicate '${red(pred.name)}' of type ${cyan(formatType(predType, Some(renv)))}.
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
     * Unexpected non-record type error.
     *
-    * @param tpe the unexpected non-record type.
-    * @param loc the location where the error occurred.
+    * @param tpe  the unexpected non-record type.
+    * @param renv the rigidity environment.
+    * @param loc  the location where the error occurred.
     */
-  case class NonRecordType(tpe: Type, loc: SourceLocation) extends TypeError {
+  case class NonRecordType(tpe: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
     def summary: String = s"Unexpected non-record type '$tpe'."
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal()
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Unexpected non-record type: '" << Red(FormatType.formatType(tpe)) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "unexpected non-record type.") << NewLine
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Unexpected non-record type: '${red(formatType(tpe, Some(renv)))}'.
+         |
+         |${code(loc, "unexpected non-record type.")}
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
     * Unexpected non-schema type error.
     *
-    * @param tpe the unexpected non-schema type.
-    * @param loc the location where the error occurred.
+    * @param tpe  the unexpected non-schema type.
+    * @param renv the rigidity environment.
+    * @param loc  the location where the error occurred.
     */
-  case class NonSchemaType(tpe: Type, loc: SourceLocation) extends TypeError {
+  case class NonSchemaType(tpe: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
     def summary: String = s"Unexpected non-schema type '$tpe'."
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal()
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Unexpected non-schema type: '" << Red(FormatType.formatType(tpe)) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "unexpected non-schema type.") << NewLine
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Unexpected non-schema type: '${red(formatType(tpe, Some(renv)))}'.
+         |
+         |${code(loc, "unexpected non-schema type.")}
+         |
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
-    * No matching instance error.
+    * Missing type class instance for a function type.
     *
     * @param clazz the class of the instance.
     * @param tpe   the type of the instance.
+    * @param renv  the rigidity environment.
     * @param loc   the location where the error occurred.
     */
-  case class NoMatchingInstance(clazz: Symbol.ClassSym, tpe: Type, loc: SourceLocation) extends TypeError {
-    def summary: String = s"No instance of class '$clazz' for type '${FormatType.formatType(tpe)}'."
+  case class MissingArrowInstance(clazz: Symbol.ClassSym, tpe: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"No instance of the '$clazz' class for the function type '${formatType(tpe, Some(renv))}'."
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal()
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> No instance of class '" << Red(clazz.toString) << "' for type " << Red(FormatType.formatType(tpe)) << "." << NewLine
-      vt << NewLine
-      vt << Code(loc, s"no instance of class '${clazz.toString}' for type ${FormatType.formatType(tpe)}") << NewLine
-      vt << NewLine
-      vt << Underline("Tip:") << " Add an instance for the type." << NewLine
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> No instance of the '${cyan(clazz.toString)}' class for the ${magenta("function")} type '${red(formatType(tpe, Some(renv)))}'.
+         |
+         |>> Did you forget to apply the function to all of its arguments?
+         |
+         |${code(loc, s"missing instance")}
+         |
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
-    * An error indicating that the main function's scheme is incorrect.
+    * Missing type class instance.
     *
-    * @param declaredScheme the erroneous function's scheme.
-    * @param expectedScheme the scheme the main function is expected to have.
-    * @param loc            the location where the error occurred.
+    * @param clazz the class of the instance.
+    * @param tpe   the type of the instance.
+    * @param renv  the rigidity environment.
+    * @param loc   the location where the error occurred.
     */
-  case class IllegalMain(declaredScheme: Scheme, expectedScheme: Scheme, loc: SourceLocation) extends TypeError {
-    override def summary: String = "Illegal main."
+  case class MissingInstance(clazz: Symbol.ClassSym, tpe: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"No instance of the '$clazz' class for the type '${formatType(tpe, Some(renv))}'."
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal()
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Main function with wrong type." << NewLine
-      vt << NewLine
-      vt << Code(loc, s"main function with wrong type.") << NewLine
-      vt << NewLine
-      vt << "The main function must have the form:" << NewLine
-      vt << NewLine
-      vt << "  def main(args: Array[String]): Int & Impure = ..." << NewLine
-      vt << NewLine
-      vt << "i.e." << NewLine
-      vt << "- it must return an integer which is the exit code, and" << NewLine
-      vt << "- it must have a side-effect (such as printing to the screen)." << NewLine
-      vt << NewLine
-      vt << "(If the arguments are not needed, then 'args' can be replaced with '_'." << NewLine
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> No instance of the '${cyan(clazz.toString)}' class for the type '${red(formatType(tpe, Some(renv)))}'.
+         |
+         |${code(loc, s"missing instance")}
+         |
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = None
   }
 
+  /**
+    * Missing `Eq` instance.
+    *
+    * @param tpe  the type of the instance.
+    * @param renv the rigidity environment.
+    * @param loc  the location where the error occurred.
+    */
+  case class MissingEq(tpe: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"Equality is not defined on '${formatType(tpe, Some(renv))}'. Define or derive instance of Eq."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Equality is not defined on ${red(formatType(tpe, Some(renv)))}. Define or derive an instance of Eq.
+         |
+         |${code(loc, s"missing Eq instance")}
+         |
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      s"""To define equality on '${formatType(tpe, Some(renv))}', either:
+         |
+         |  (a) define an instance of Eq for '${formatType(tpe, Some(renv))}', or
+         |  (b) use 'with' to derive an instance of Eq for '${formatType(tpe, Some(renv))}', for example:.
+         |
+         |  enum Color with Eq {
+         |    case Red, Green, Blue
+         |  }
+         |
+         |""".stripMargin
+    })
+  }
+
+  /**
+    * Missing `Order` instance.
+    *
+    * @param tpe  the type of the instance.
+    * @param renv the rigidity environment.
+    * @param loc  the location where the error occurred.
+    */
+  case class MissingOrder(tpe: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"Order is not defined on '${formatType(tpe, Some(renv))}'. Define or derive instance of Order."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Order is not defined on ${red(formatType(tpe, Some(renv)))}. Define or derive an instance of Order.
+         |
+         |${code(loc, s"missing Order instance")}
+         |
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      s"""To define an order on '${formatType(tpe, Some(renv))}', either:
+         |
+         |  (a) define an instance of Order for '${formatType(tpe, Some(renv))}', or
+         |  (b) use 'with' to derive an instance of Order for '${formatType(tpe, Some(renv))}', for example:.
+         |
+         |  enum Color with Eq, Order {
+         |    case Red, Green, Blue
+         |  }
+         |
+         |Note: To derive Order you must also derive Eq.
+         |""".stripMargin
+    })
+  }
+
+  /**
+    * Missing `ToString` instance.
+    *
+    * @param tpe  the type of the instance.
+    * @param renv the rigidity environment.
+    * @param loc  the location where the error occurred.
+    */
+  case class MissingToString(tpe: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"ToString is not defined for '${formatType(tpe, Some(renv))}'. Define or derive instance of ToString."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> ToString is not defined on ${red(formatType(tpe, Some(renv)))}. Define or derive an instance of ToString.
+         |
+         |${code(loc, s"missing ToString instance")}
+         |
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      s"""To define a string representation of '${formatType(tpe, Some(renv))}', either:
+         |
+         |  (a) define an instance of ToString for '${formatType(tpe, Some(renv))}', or
+         |  (b) use 'with' to derive an instance of ToString for '${formatType(tpe, Some(renv))}', for example:.
+         |
+         |  enum Color with ToString {
+         |    case Red, Green, Blue
+         |  }
+         |
+         |""".stripMargin
+    })
+  }
+
+  /**
+    * Missing `Sendable` instance.
+    *
+    * @param tpe  the type of the instance.
+    * @param renv the rigidity environment.
+    * @param loc  the location where the error occurred.
+    */
+  case class MissingSendable(tpe: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"Sendable is not defined for '${formatType(tpe, Some(renv))}'. Define or derive instance of Sendable."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Sendable is not defined on ${red(formatType(tpe, Some(renv)))}. Define or derive an instance of Sendable.
+         |
+         |${code(loc, s"missing Sendable instance")}
+         |
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      s"""To define a string representation of '${formatType(tpe, Some(renv))}', either:
+         |
+         |  (a) define an instance of Sendable for '${formatType(tpe, Some(renv))}', or
+         |  (b) use 'with' to derive an instance of Sendable for '${formatType(tpe, Some(renv))}', for example:.
+         |
+         |  enum Color with Sendable {
+         |    case Red, Green, Blue
+         |  }
+         |
+         |""".stripMargin
+    })
+  }
+
+  /**
+    * An error indicating that a region variable escapes its scope.
+    *
+    * @param rvar the region variable.
+    * @param tpe  the type wherein the region variable escapes.
+    * @param loc  the location where the error occurred.
+    */
+  case class RegionVarEscapes(rvar: Type.Var, tpe: Type, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"Region variable '${formatType(rvar)}' escapes its scope."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> The region variable '${red(formatType(rvar))}' escapes its scope.
+         |
+         |${code(loc, "region variable escapes.")}
+         |
+         |The escaping expression has type:
+         |
+         |  ${red(formatType(tpe))}
+         |
+         |which contains the region variable.
+         |
+         |The region variable was declared here:
+         |
+         |${code(rvar.loc, "region variable declared here.")}
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = None
+  }
+
+  /**
+    * An error indicating an unexpected argument.
+    *
+    * @param sym      the symbol.
+    * @param ith      the index of the unexpected argument.
+    * @param expected the expected type.
+    * @param actual   the actual type.
+    * @param loc      the location where the error occurred.
+    */
+  case class UnexpectedArgument(sym: Symbol, ith: Int, expected: Type, actual: Type, renv: RigidityEnv, loc: SourceLocation)(implicit flix: Flix) extends TypeError {
+    def summary: String = s"Expected argument of type '${formatType(expected, Some(renv))}', but got '${formatType(actual, Some(renv))}'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Expected argument of type '${formatType(expected, Some(renv))}', but got '${formatType(actual, Some(renv))}'.
+         |
+         |${code(loc, s"expected: '${cyan(formatType(expected, Some(renv)))}'")}
+         |
+         |The function '${magenta(sym.toString)}' expects its ${Grammar.ordinal(ith)} argument to be of type '${formatType(expected, Some(renv))}'.
+         |
+         |Expected: ${formatType(expected, Some(renv))}
+         |  Actual: ${formatType(actual, Some(renv))}
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = None
+  }
+
+  /**
+    * An error indicating the number of effect operation arguments does not match the expected number.
+    *
+    * @param op       the effect operation symbol.
+    * @param expected the expected number of arguments.
+    * @param actual   the actual number of arguments.
+    * @param loc      the location where the error occurred.
+    */
+  case class InvalidOpParamCount(op: Symbol.OpSym, expected: Int, actual: Int, loc: SourceLocation) extends TypeError {
+    override def summary: String = s"Expected $expected parameter(s) but found $actual."
+
+    /**
+      * Returns the formatted error message.
+      */
+    override def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |
+         |The operation $op expects $expected parameter(s),
+         |but $actual are provided here.
+         |
+         |${code(loc, s"expected $expected parameter(s) but found $actual")}
+         |""".stripMargin
+    }
+
+    /**
+      * Returns a formatted string with helpful suggestions.
+      */
+    override def explain(formatter: Formatter): Option[String] = None
+  }
+
+  /**
+    * An error indicating that a hacky assumption was not fulfilled.
+    */
+  case class HackError(summary: String, loc: SourceLocation) extends TypeError {
+    override def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |
+         |$summary
+         |
+         |${code(loc, s"$summary")}
+         |""".stripMargin
+    }
+
+    /**
+      * Returns a formatted string with helpful suggestions.
+      */
+    override def explain(formatter: Formatter): Option[String] = None
+  }
 }

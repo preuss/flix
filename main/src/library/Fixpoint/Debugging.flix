@@ -13,52 +13,56 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 namespace Fixpoint {
 
-    use Fixpoint/Ast.Datalog;
-    use Fixpoint/Ast.PredSym;
-    use Fixpoint/Ram.RamStmt;
+    use Fixpoint/Ast.Datalog
+    use Fixpoint/Ram.RamStmt
+    use Fixpoint/Shared.PredSym
 
     ///
     /// Invoked before the fixpoint computation.
     ///
-    pub def notifyPreSolve(d: Datalog[v], _stf: Map[PredSym, Int32]): Unit with Eq[v], Order[v], ToString[v] = {
+    @Internal
+    pub def notifyPreSolve(d: Datalog[v], _stf: Map[PredSym, Int32]): Unit \ IO with Order[v] = {
         if (enableDebugging()) {
-            println(String.repeat("*", 80));
+            println(String.repeat(80, "*"));
             println("** Datalog Input");
-            println(String.repeat("*", 80));
+            println(String.repeat(80, "*"));
             println("");
             println(String.indent(4, "${d}"));
             println("")
         } else ()
-    } as & Pure
+    }
 
     ///
     /// Invoked with the minimal model of the fixpoint computation.
     ///
-    pub def notifyPostSolve(d: Datalog[v]): Unit with Eq[v], Order[v], ToString[v] = {
+    @Internal
+    pub def notifyPostSolve(d: Datalog[v]): Unit \ IO with Order[v] = {
         if (enableDebugging()) {
-            println(String.repeat("*", 80));
+            println(String.repeat(80, "*"));
             println("** Minimal Model");
-            println(String.repeat("*", 80));
+            println(String.repeat(80, "*"));
             println("");
             println(String.indent(4, "${d}"));
             println("")
         } else ()
-    } as & Pure
+    }
 
     ///
     /// Invoked before the fixpoint computation.
     ///
-    pub def notifyPreInterpret(s: RamStmt[v]): Unit with Eq[v], Order[v], ToString[v] = {
+    @Internal
+    pub def notifyPreInterpret(s: RamStmt[v]): Unit \ IO with Order[v] = {
         if (enableDebugging()) {
-            println(String.repeat("*", 80));
+            println(String.repeat(80, "*"));
             println("** Relation Algebra Machine AST");
-            println(String.repeat("*", 80));
+            println(String.repeat(80, "*"));
             println("");
             println(String.indent(4, "${s}"));
             println("")
         } else ()
-    } as & Pure
+    }
 
 }

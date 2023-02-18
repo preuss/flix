@@ -14,44 +14,91 @@
  * limitations under the License.
  */
 
-use Fixpoint/Ast.Denotation;
 
 namespace Fixpoint/Ram {
+
+    use Fixpoint.PredSymsOf
+    use Fixpoint.SubstitutePredSym
+    use Fixpoint/Ast.Denotation
+    use Fixpoint/Shared.PredSym
+
+    @Internal
     pub enum RamSym[v] {
-        case Full(String, Denotation[v])
-        case Delta(String, Denotation[v])
-        case New(String, Denotation[v])
+        case Full(PredSym, Int32, Denotation[v])
+        case Delta(PredSym, Int32, Denotation[v])
+        case New(PredSym, Int32, Denotation[v])
     }
 
-    pub def toDenotation(ramSym: RamSym[v]): Denotation[v] = match ramSym {
-        case Full(_, den) => den
-        case Delta(_, den) => den
-        case New(_, den) => den
-    }
-
-    instance ToString[RamSym[v]] {
-        pub def toString(ramSym: RamSym[v]): String = match ramSym {
-            case Full(name, _) => name
-            case Delta(name, _) => "Δ${name}"
-            case New(name, _) => "Δ${name}'"
+    instance Eq[RamSym[v]] {
+        pub def eq(a: RamSym[v], b: RamSym[v]): Bool = match (a, b) {
+            case (RamSym.Full(s1, _, _),  RamSym.Full(s2, _, _))  => s1 == s2
+            case (RamSym.Delta(s1, _, _), RamSym.Delta(s2, _, _)) => s1 == s2
+            case (RamSym.New(s1, _, _),   RamSym.New(s2, _, _))   => s1 == s2
+            case _                                  => false
         }
     }
 
     instance Order[RamSym[v]] {
         pub def compare(a: RamSym[v], b: RamSym[v]): Comparison = match a {
-            case Full(s1, _) => match b {
-                case Full(s2, _) => s1 <=> s2
-                case _ => GreaterThan
+            case RamSym.Full(s1, _, _) => match b {
+                case RamSym.Full(s2, _, _) => s1 <=> s2
+                case _ => Comparison.GreaterThan
             }
-            case Delta(s1, _) => match b {
-                case Delta(s2, _) => s1 <=> s2
-                case New(_) => GreaterThan
-                case Full(_) => LessThan
+            case RamSym.Delta(s1, _, _) => match b {
+                case RamSym.Delta(s2, _, _) => s1 <=> s2
+                case RamSym.New(_) => Comparison.GreaterThan
+                case RamSym.Full(_) => Comparison.LessThan
             }
-            case New(s1, _) => match b {
-                case New(s2, _) => s1 <=> s2
-                case _ => LessThan
+            case RamSym.New(s1, _, _) => match b {
+                case RamSym.New(s2, _, _) => s1 <=> s2
+                case _ => Comparison.LessThan
             }
         }
+    }
+
+    instance PredSymsOf[RamSym[v]] {
+        pub def predSymsOf(x: RamSym[v]): Set[PredSym] = match x {
+            case RamSym.Full(predSym, _, _)    => Set.singleton(predSym)
+            case RamSym.Delta(predSym, _, _)   => Set.singleton(predSym)
+            case RamSym.New(predSym, _, _)     => Set.singleton(predSym)
+        }
+    }
+
+    instance SubstitutePredSym[RamSym[v]] {
+        pub def substitute(x: RamSym[v], s: Map[PredSym, PredSym]): RamSym[v] = match x {
+            case RamSym.Full(predSym, arity, den)  =>
+                let newSym = Map.getWithDefault(predSym, predSym, s);
+                RamSym.Full(newSym, arity, den)
+
+            case RamSym.Delta(predSym, arity, den) =>
+                let newSym = Map.getWithDefault(predSym, predSym, s);
+                RamSym.Delta(newSym, arity, den)
+
+            case RamSym.New(predSym, arity, den)   =>
+                let newSym = Map.getWithDefault(predSym, predSym, s);
+                RamSym.New(newSym, arity, den)
+        }
+    }
+
+    instance ToString[RamSym[v]] {
+        pub def toString(ramSym: RamSym[v]): String = match ramSym {
+            case RamSym.Full(sym, _, _)    => "${sym}"
+            case RamSym.Delta(sym, _, _)   => "Δ${sym}"
+            case RamSym.New(sym, _, _)     => "Δ${sym}'"
+        }
+    }
+
+    @Internal
+    pub def arityOf(ramSym: RamSym[v]): Int32 = match ramSym {
+        case RamSym.Full(_, arity, _) => arity
+        case RamSym.Delta(_, arity, _) => arity
+        case RamSym.New(_, arity, _) => arity
+    }
+
+    @Internal
+    pub def toDenotation(ramSym: RamSym[v]): Denotation[v] = match ramSym {
+        case RamSym.Full(_, _, den) => den
+        case RamSym.Delta(_, _, den) => den
+        case RamSym.New(_, _, den) => den
     }
 }

@@ -17,9 +17,10 @@
 package ca.uwaterloo.flix
 
 import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.language.CompilationError
+import ca.uwaterloo.flix.language.CompilationMessage
+import ca.uwaterloo.flix.language.ast.SourceLocation
 import ca.uwaterloo.flix.runtime.CompilationResult
-import ca.uwaterloo.flix.util.{Options, Validation}
+import ca.uwaterloo.flix.util.{Formatter, Options, Validation}
 import org.scalatest.FunSuite
 
 import scala.reflect.ClassTag
@@ -31,32 +32,48 @@ trait TestUtils {
   /**
     * Compiles the given input string `s` with the given compilation options `o`.
     */
-  def compile(s: String, o: Options): Validation[CompilationResult, CompilationError] = new Flix().setOptions(o).addStr(s).compile()
+  def compile(s: String, o: Options): Validation[CompilationResult, CompilationMessage] = new Flix().setOptions(o).addSourceCode(s).compile()
+
+  private def errorString(errors: Seq[CompilationMessage]): String = {
+    errors.map(_.message(Formatter.NoFormatter)).mkString("\n\n")
+  }
 
   /**
     * Asserts that the validation is a failure with a value of the parametric type `T`.
     */
-  def expectError[T](result: Validation[CompilationResult, CompilationError])(implicit classTag: ClassTag[T]): Unit = result match {
+  def expectError[T](result: Validation[CompilationResult, CompilationMessage])(implicit classTag: ClassTag[T]): Unit = result match {
     case Validation.Success(_) => fail(s"Expected Failure, but got Success.")
-    case Validation.Failure(errors) =>
+
+    case failure =>
       val expected = classTag.runtimeClass
-      val actuals = errors.map(_.getClass)
+      val actuals = failure.errors.map(_.getClass).toList
 
       if (!actuals.exists(expected.isAssignableFrom(_)))
-        fail(s"Expected an error of type ${expected.getSimpleName}, but found ${actuals.mkString(", ")}.")
+        fail(s"Expected an error of type ${expected.getSimpleName}, but found:\n\n${actuals.map(_.getName)}.")
+      else if (failure.errors.exists(e => e.loc == SourceLocation.Unknown))
+        fail("Error contains unknown source location.")
   }
 
   /**
     * Asserts that the validation does not contain a value of the parametric type `T`.
     */
-  def rejectError[T](result: Validation[CompilationResult, CompilationError])(implicit classTag: ClassTag[T]): Unit = result match {
+  def rejectError[T](result: Validation[CompilationResult, CompilationMessage])(implicit classTag: ClassTag[T]): Unit = result match {
     case Validation.Success(_) => ()
-    case Validation.Failure(errors) =>
+
+    case failure =>
       val rejected = classTag.runtimeClass
-      val actuals = errors.map(_.getClass)
+      val actuals = failure.errors.map(_.getClass)
 
       if (actuals.exists(rejected.isAssignableFrom(_)))
         fail(s"Unexpected an error of type ${rejected.getSimpleName}.")
   }
 
+  /**
+    * Asserts that the validation is successful.
+    */
+  def expectSuccess(result: Validation[CompilationResult, CompilationMessage]): Unit = result match {
+    case Validation.Success(_) => ()
+    case failure =>
+      fail(s"Expected success, but found errors:\n\n${errorString(failure.errors)}.")
+  }
 }

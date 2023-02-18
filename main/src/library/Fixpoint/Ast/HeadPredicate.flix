@@ -13,21 +13,42 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 namespace Fixpoint/Ast {
+
+    use Fixpoint.PredSymsOf
+    use Fixpoint.SubstitutePredSym
+    use Fixpoint/Shared.PredSym
+
+    @Internal
     pub enum HeadPredicate[v] {
-        case HeadAtom(PredSym, Denotation[v], Array[HeadTerm[v]])
+        case HeadAtom(PredSym, Denotation[v], List[HeadTerm[v]])
     }
 
-    instance ToString[HeadPredicate[v]] with ToString[v] {
+    instance PredSymsOf[HeadPredicate[v]] {
+        pub def predSymsOf(x: HeadPredicate[v]): Set[PredSym] = match x {
+            case HeadPredicate.HeadAtom(predSym, _, _ ) => Set.singleton(predSym)
+        }
+    }
+
+    instance SubstitutePredSym[HeadPredicate[v]] {
+        pub def substitute(x: HeadPredicate[v], s: Map[PredSym, PredSym]): HeadPredicate[v] = match x {
+            case HeadPredicate.HeadAtom(predSym, den, terms) =>
+                let newSym = Map.getWithDefault(predSym, predSym, s);
+                HeadPredicate.HeadAtom(newSym, den, terms)
+        }
+    }
+
+    instance ToString[HeadPredicate[v]] {
         pub def toString(head: HeadPredicate[v]): String =
-            use Fixpoint.commaSeparate;
             match head {
-                case HeadAtom(predSym, Relational, terms) => "${predSym}(${commaSeparate(terms)})"
-                case HeadAtom(predSym, Latticenal(_), terms) =>
-                    let len = Array.length(terms) as & Pure;
-                    let k = terms[0..len-1] as & Pure;
-                    let l = terms[len-1] as & Pure;
-                    "${predSym}(${commaSeparate(k)}; ${l})"
+                case HeadPredicate.HeadAtom(predSym, Denotation.Relational, terms) => "${predSym}(${terms |> List.join(", ")})"
+                case HeadPredicate.HeadAtom(predSym, Denotation.Latticenal(_), terms) =>
+                    let (keyTerms, latticeTerms) = List.splitAt(List.length(terms)-1, terms);
+                    match List.head(latticeTerms) {
+                        case None    => "${predSym}(${keyTerms |> List.join(", ")})"
+                        case Some(l) => "${predSym}(${keyTerms |> List.join(", ")}; ${l})"
+                    }
             }
     }
 }

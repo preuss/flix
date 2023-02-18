@@ -16,143 +16,134 @@
 
 package ca.uwaterloo.flix.util
 
-import java.nio.file.{Path, Paths}
-import java.time.{Duration => JDuration}
+import ca.uwaterloo.flix.language.ast.Symbol
+
+import java.nio.file.Path
 
 object Options {
   /**
     * Default options.
     */
   val Default: Options = Options(
-    core = false,
+    lib = LibLevel.All,
     debug = false,
     documentor = false,
-    invariants = false,
+    entryPoint = None,
+    explain = false,
+    installDeps = false,
+    incremental = true,
     json = false,
-    mode = CompilationMode.Development,
-    optimizations = Optimization.All,
-    quickchecker = false,
+    output = None,
+    progress = false,
     test = false,
     target = JvmTarget.Version18,
-    targetDirectory = Paths.get("./target/flix/"),
-    timeout = None,
     threads = Runtime.getRuntime.availableProcessors(),
-    verbosity = Verbosity.Normal,
-    verifier = false,
     loadClassFiles = true,
-    writeClassFiles = true,
     xallowredundancies = false,
-    xlinter = false,
-    xnoboolunification = false,
-    xnostratifier = false,
-    xstatistics = false
+    xbddthreshold = None,
+    xboolclassic = false,
+    xnoboolcache = false,
+    xnoboolspecialcases = false,
+    xnobooltable = false,
+    xnoboolunif = false,
+    xnounittests = false,
+    xstatistics = false,
+    xstrictmono = false,
+    xnoseteffects = false,
+    xnobooleffects = false,
+    xnooptimizer = false,
+    xvirtualthreads = false,
+    xprintasts = Set.empty,
+    xprintboolunif = false,
+    xnoqmc = false,
+    xflexibleregions = false,
+    xsummary = false
   )
 
   /**
     * Default test options.
     */
-  val DefaultTest: Options = Default.copy(core = false, test = true, verbosity = Verbosity.Silent)
+  val DefaultTest: Options = Default.copy(lib = LibLevel.All, progress = false, test = true)
 
   /**
     * Default test options with the standard library.
     */
-  val TestWithLibrary: Options = DefaultTest
+  val TestWithLibAll: Options = DefaultTest
 
   /**
-    * Default test options without the standard library.
+    * Default test options with the minimal library.
     */
-  val TestWithoutLibrary: Options = DefaultTest.copy(core = true)
+  val TestWithLibMin: Options = DefaultTest.copy(lib = LibLevel.Min)
+
+  /**
+    * Default test options without any library.
+    */
+  val TestWithLibNix: Options = DefaultTest.copy(lib = LibLevel.Nix)
 }
 
 /**
   * General Flix options.
   *
-  * @param core               disables loading of all non-essential namespaces.
-  * @param debug              enables the emission of debugging information.
-  * @param documentor         enables generation of flixdoc.
-  * @param invariants         enables checking of compiler invariants.
-  * @param json               enable json output
-  * @param mode               the compilation mode.
-  * @param quickchecker       enables the quickchecker.
-  * @param test               enables test mode.
-  * @param target             the target JVM.
-  * @param targetDirectory    the target directory for compiled code.
-  * @param timeout            selects the solver timeout.
-  * @param threads            selects the number of threads to use.
-  * @param verbosity          selects the level of verbosity.
-  * @param verifier           enables the verifier.
-  * @param loadClassFiles     loads the generated class files into the JVM.
-  * @param writeClassFiles    enables output of class files.
-  * @param xallowredundancies disables the redundancy checker.
-  * @param xlinter            enables the semantic linter.
-  * @param xnoboolunification disables boolean unification.
-  * @param xnostratifier      disables computation of stratification.
-  * @param xstatistics        prints compiler statistics.
+  * @param lib                 selects the level of libraries to include.
+  * @param debug               enables the emission of debugging information.
+  * @param documentor          enables generation of flixdoc.
+  * @param entryPoint          specifies the main entry point.
+  * @param explain             enables additional explanations.
+  * @param incremental         enables incremental compilation.
+  * @param installDeps         enables automatic installation of dependencies.
+  * @param json                enable json output.
+  * @param output              the optional output directory where to place JVM bytecode.
+  * @param progress            print progress during compilation.
+  * @param test                enables test mode.
+  * @param target              the target JVM.
+  * @param threads             selects the number of threads to use.
+  * @param loadClassFiles      loads the generated class files into the JVM.
+  * @param xallowredundancies  disables the redundancy checker.
+  * @param xbddthreshold       the threshold for when to use BDDs for SVE.
+  * @param xnoboolcache        disable Boolean caches.
+  * @param xnoboolspecialcases disable Boolean unification shortcuts.
+  * @param xnobooltable        disable Boolean minimization via tabling.
+  * @param xnounittests        excludes unit tests from performance benchmarks.
+  * @param xstatistics         enables statistics collection.
+  * @param xnoqmc              enables the Quine McCluskey algorihm when using BDDs.
+  * @param xstrictmono         enables strict monomorphization.
+  * @param xprintasts          prints the chosen AST to a given path.
+  * @param xsummary            prints a summary of the compiled modules.
   */
-case class Options(core: Boolean,
+case class Options(lib: LibLevel,
                    debug: Boolean,
                    documentor: Boolean,
-                   invariants: Boolean,
+                   entryPoint: Option[Symbol.DefnSym],
+                   explain: Boolean,
+                   incremental: Boolean,
+                   installDeps: Boolean,
                    json: Boolean,
-                   optimizations: Set[Optimization],
-                   mode: CompilationMode,
-                   quickchecker: Boolean,
+                   progress: Boolean,
+                   output: Option[Path],
                    target: JvmTarget,
-                   targetDirectory: Path,
                    test: Boolean,
-                   timeout: Option[JDuration],
                    threads: Int,
-                   verbosity: Verbosity,
-                   verifier: Boolean,
                    loadClassFiles: Boolean,
-                   writeClassFiles: Boolean,
                    xallowredundancies: Boolean,
-                   xlinter: Boolean,
-                   xnoboolunification: Boolean,
-                   xnostratifier: Boolean,
-                   xstatistics: Boolean
+                   xbddthreshold: Option[Int],
+                   xboolclassic: Boolean,
+                   xnoboolcache: Boolean,
+                   xnoboolspecialcases: Boolean,
+                   xnobooltable: Boolean,
+                   xnoboolunif: Boolean,
+                   xnoqmc: Boolean,
+                   xnounittests: Boolean,
+                   xstatistics: Boolean,
+                   xstrictmono: Boolean,
+                   xnoseteffects: Boolean,
+                   xnobooleffects: Boolean,
+                   xnooptimizer: Boolean,
+                   xvirtualthreads: Boolean,
+                   xprintasts: Set[String],
+                   xprintboolunif: Boolean,
+                   xflexibleregions: Boolean,
+                   xsummary: Boolean
                   )
-
-/**
-  * A common super-type for optimizations.
-  */
-sealed trait Optimization
-
-object Optimization {
-
-  /**
-    * All optimizations supported by the compiler.
-    */
-  val All: Set[Optimization] = Set(
-    TailCalls
-  )
-
-  /**
-    * Enables compilation with full tail calls.
-    */
-  case object TailCalls extends Optimization
-
-}
-
-/**
-  * A common super-type for the compilation mode.
-  */
-sealed trait CompilationMode
-
-object CompilationMode {
-
-  /**
-    * Enables the development mode of the compiler.
-    */
-  case object Development extends CompilationMode
-
-
-  /**
-    * Enables the release mode of the compiler.
-    */
-  case object Release extends CompilationMode
-
-}
 
 /**
   * An option to control the version of emitted JVM bytecode.
@@ -183,26 +174,23 @@ object JvmTarget {
 
 }
 
-/**
-  * An option to control the level of verbosity.
-  */
-sealed trait Verbosity
+sealed trait LibLevel
 
-object Verbosity {
+object LibLevel {
 
   /**
-    * Output verbose information. Useful for debugging.
+    * Do not include any libraries, even those essential for basic functionality.
     */
-  case object Verbose extends Verbosity
+  case object Nix extends LibLevel
 
   /**
-    * Output condensed information. The default.
+    * Only include essential libraries.
     */
-  case object Normal extends Verbosity
+  case object Min extends LibLevel
 
   /**
-    * Output nothing. Useful for when Flix is used as a library.
+    * Include the full standard library.
     */
-  case object Silent extends Verbosity
+  case object All extends LibLevel
 
 }

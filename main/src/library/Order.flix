@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
+use Bool.{==>, <==>}
+
 ///
 /// A type class for types with a total order.
 ///
-pub lawless class Order[a] {
+pub lawful class Order[a] with Eq[a] {
 
     ///
-    /// Returns `LessThan` if `x` < `y`, `Equal` if `x` == `y` or `GreaterThan` `if `x` > `y`.
+    /// Returns `Comparison.LessThan` if `x` < `y`, `Equal` if `x` == `y` or `Comparison.GreaterThan` `if `x` > `y`.
     ///
     pub def compare(x: a, y: a): Comparison
 
@@ -28,7 +30,7 @@ pub lawless class Order[a] {
     /// Returns `true` if and only if `x < y`.
     ///
     pub def less(x: a, y: a): Bool = match Order.compare(x, y) {
-        case LessThan   => true
+        case Comparison.LessThan   => true
         case _          => false
     }
 
@@ -36,8 +38,8 @@ pub lawless class Order[a] {
     /// Returns `true` if and only if `x <= y`.
     ///
     pub def lessEqual(x: a, y: a): Bool = match Order.compare(x, y) {
-        case LessThan   => true
-        case EqualTo    => true
+        case Comparison.LessThan   => true
+        case Comparison.EqualTo    => true
         case _          => false
     }
 
@@ -45,7 +47,7 @@ pub lawless class Order[a] {
     /// Returns `true` if and only if `x > y`.
     ///
     pub def greater(x: a, y: a): Bool = match Order.compare(x, y) {
-        case GreaterThan    => true
+        case Comparison.GreaterThan    => true
         case _              => false
     }
 
@@ -53,81 +55,106 @@ pub lawless class Order[a] {
     /// Returns `true` if and only if `x >= y`.
     ///
     pub def greaterEqual(x: a, y: a): Bool = match Order.compare(x, y) {
-        case GreaterThan    => true
-        case EqualTo        => true
+        case Comparison.GreaterThan    => true
+        case Comparison.EqualTo        => true
         case _              => false
     }
 
+    ///
+    /// Returns the minimum of `x` and `y`.
+    ///
+    pub def min(x: a, y: a): a = match (x <=> y) {
+        case Comparison.GreaterThan => y
+        case _ => x
+    }
+
+    ///
+    /// Returns the maximum of `x` and `y`.
+    ///
+    pub def max(x: a, y: a): a = match (x <=> y) {
+        case Comparison.LessThan => y
+        case _ => x
+    }
+
+    ///
+    /// Reflexivity: An element `x` is lower or equal to itself.
+    ///
+    law reflexivity: forall(x: a). x <= x
+
+    ///
+    /// Antisymmetry: If `x` is lower or equal to `y` and `y` is lower or equal to `x` then `x` must be equal to `y`.
+    ///
+    law symmetry: forall(x: a, y: a). ((x <= y) and (y <= x)) ==> (x == y)
+
+    ///
+    /// Transitivity: If `x` is lower or equal to `y` and `y` is lower equal to `z` then `x` must be lower or equal to `z`.
+    ///
+    law transitivity: forall(x: a, y: a, z: a). ((x <= y) and (y <= z)) ==> (x <= z)
+
+    ///
+    /// Totality: For each two elements `x` and `y` either `x` is lower or equal to `y` or the other way round.
+    ///
+    law totality: forall(x: a, y: a). ((x <= y) or (y <= x))
+
+    ///
+    /// Definition of the minimum function.
+    ///
+    law min: forall(x: a, y: a). ((x <= y) ==> (Order.min(x, y) == x)) and ((y <= x) ==> (Order.min(x, y) == y))
+
+    ///
+    /// Definition of the maximum function.
+    ///
+    law max: forall(x: a, y: a). ((y <= x) ==> (Order.max(x, y) == x)) and ((x <= y) ==> (Order.max(x, y) == y))
+
+    ///
+    /// x < y is logically equivalent to not (y <= x).
+    /// This law defines the associated strict total order "<" associated with "<=".
+    ///
+    law strictTotalOrder: forall(x: a, y: a). (x < y) <==> (not (y <= x))
+
+    ///
+    /// This law defines ">" based on "<".
+    ///
+    law inverseOrder1: forall(x: a, y: a). (x > y) <==> (y < x)
+
+    ///
+    /// This law defines ">=" based on "<=".
+    ///
+    law inverseOrder2: forall(x: a, y: a). (x >= y) <==> (y <= x)
+
+    ///
+    /// Definition of `compare` based on the defined total order.
+    ///
+    law compare: forall(x: a, y: a). ((x < y) ==> (Order.compare(x, y) == Comparison.LessThan)) and ((x == y) ==> (Order.compare(x, y) == Comparison.EqualTo)) and ((x > y) ==> (Order.compare(x, y) == Comparison.GreaterThan))
 }
 
 namespace Order {
 
     ///
-    /// Converts a `Comparison` value to an integer.
-    /// The return value is:
-    /// `-1` if `c` is `LessThan`.
-    /// `0` if `c` is `EqualTo`.
-    /// `+1` if `c` is `GreaterThan`.
-    ///
-    pub def toInt(c: Comparison): Int32 = match c {
-        case LessThan => -1
-        case EqualTo => 0
-        case GreaterThan => +1
-    }
-
-    ///
-    /// Converts an integer to a `Comparison` value.
-    /// The return value is:
-    /// `LessThan` if `i < 0`.
-    /// `EqualTo` if `i == 0`.
-    /// `GreaterThan` if `i > 0`.
-    ///
-    pub def fromInt(i: Int32): Comparison =
-        if (i < 0) LessThan
-        else if (i == 0) EqualTo
-        else GreaterThan
-
-    ///
-    /// Returns the minimum of `x` and `y`.
-    ///
-    pub def min(x: a, y: a): a with Order[a] = match (x <=> y) {
-        case GreaterThan => y
-        case _ => x
-    }
-
-    ///
     /// Returns the minimum of `x` and `y` according to the given comparator `cmp`.
     ///
     pub def minBy(cmp: (a, a) -> Comparison, x: a, y: a): a =
-        if (cmp(x, y) == GreaterThan) y else x
-
-    ///
-    /// Returns the maximum of `x` and `y`.
-    ///
-    pub def max(x: a, y: a): a with Order[a] = match (x <=> y) {
-        case LessThan => y
-        case _ => x
-    }
+        if (cmp(x, y) == Comparison.GreaterThan) y else x
 
     ///
     /// Returns the maximum of `x` and `y` according to the given comparator `cmp`.
     ///
     pub def maxBy(cmp: (a, a) -> Comparison, x: a, y: a): a =
-        if (cmp(x, y) == LessThan) y else x
+        if (cmp(x, y) == Comparison.LessThan) y else x
 
     ///
     /// Lazily combines two comparisons.
     ///
-    /// If `c1` is either `LessThan` or `GreaterThan` then `c2` is never evaluated.
+    /// If `c1` is either `Comparison.LessThan` or `Comparison.GreaterThan` then `c2` is never evaluated.
     ///
     pub def thenCompare(c1: Comparison, c2: Lazy[Comparison]): Comparison =
-        if (c1 != EqualTo) c1 else force c2
+        if (c1 != Comparison.EqualTo) c1 else force c2
 
 }
 
 instance Order[Unit] {
 
-    pub def compare(_: Unit, _: Unit): Comparison = EqualTo
+    pub def compare(_: Unit, _: Unit): Comparison = Comparison.EqualTo
 
 }
 
@@ -136,14 +163,14 @@ instance Order[Bool] {
     pub def compare(x: Bool, y: Bool): Comparison =
         if (x) {
             if (y)
-                EqualTo
+                Comparison.EqualTo
             else
-                GreaterThan
+                Comparison.GreaterThan
         } else {
             if (y)
-                LessThan
+                Comparison.LessThan
             else
-                EqualTo
+                Comparison.EqualTo
         }
 
 }
@@ -160,11 +187,11 @@ instance Order[Char] {
 
     pub def compare(x: Char, y: Char): Comparison =
         if ($CHAR_LT$(x, y))
-            LessThan
+            Comparison.LessThan
         else if ($CHAR_GT$(x, y))
-            GreaterThan
+            Comparison.GreaterThan
         else
-            EqualTo
+            Comparison.EqualTo
 
 }
 
@@ -180,11 +207,11 @@ instance Order[Float32] {
 
     pub def compare(x: Float32, y: Float32): Comparison =
         if ($FLOAT32_LT$(x, y))
-            LessThan
+            Comparison.LessThan
         else if ($FLOAT32_GT$(x, y))
-            GreaterThan
+            Comparison.GreaterThan
         else
-            EqualTo
+            Comparison.EqualTo
 
 }
 
@@ -200,11 +227,31 @@ instance Order[Float64] {
 
     pub def compare(x: Float64, y: Float64): Comparison =
         if ($FLOAT64_LT$(x, y))
-            LessThan
+            Comparison.LessThan
         else if ($FLOAT64_GT$(x, y))
-            GreaterThan
+            Comparison.GreaterThan
         else
-            EqualTo
+            Comparison.EqualTo
+
+}
+
+instance Order[BigDecimal] {
+
+    pub override def less(x: BigDecimal, y: BigDecimal): Bool = $BIGDECIMAL_LT$(x, y)
+
+    pub override def lessEqual(x: BigDecimal, y: BigDecimal): Bool = $BIGDECIMAL_LE$(x, y)
+
+    pub override def greater(x: BigDecimal, y: BigDecimal): Bool = $BIGDECIMAL_GT$(x, y)
+
+    pub override def greaterEqual(x: BigDecimal, y: BigDecimal): Bool = $BIGDECIMAL_GE$(x, y)
+
+    pub def compare(x: BigDecimal, y: BigDecimal): Comparison =
+        if ($BIGDECIMAL_LT$(x, y))
+            Comparison.LessThan
+        else if ($BIGDECIMAL_GT$(x, y))
+            Comparison.GreaterThan
+        else
+            Comparison.EqualTo
 
 }
 
@@ -220,11 +267,11 @@ instance Order[Int8] {
 
     pub def compare(x: Int8, y: Int8): Comparison =
         if ($INT8_LT$(x, y))
-            LessThan
+            Comparison.LessThan
         else if ($INT8_GT$(x, y))
-            GreaterThan
+            Comparison.GreaterThan
         else
-            EqualTo
+            Comparison.EqualTo
 
 }
 
@@ -240,11 +287,11 @@ instance Order[Int16] {
 
     pub def compare(x: Int16, y: Int16): Comparison =
         if ($INT16_LT$(x, y))
-            LessThan
+            Comparison.LessThan
         else if ($INT16_GT$(x, y))
-            GreaterThan
+            Comparison.GreaterThan
         else
-            EqualTo
+            Comparison.EqualTo
 
 }
 
@@ -260,11 +307,11 @@ instance Order[Int32] {
 
     pub def compare(x: Int32, y: Int32): Comparison =
         if ($INT32_LT$(x, y))
-            LessThan
+            Comparison.LessThan
         else if ($INT32_GT$(x, y))
-            GreaterThan
+            Comparison.GreaterThan
         else
-            EqualTo
+            Comparison.EqualTo
 
 }
 
@@ -280,11 +327,11 @@ instance Order[Int64] {
 
     pub def compare(x: Int64, y: Int64): Comparison =
         if ($INT64_LT$(x, y))
-            LessThan
+            Comparison.LessThan
         else if ($INT64_GT$(x, y))
-            GreaterThan
+            Comparison.GreaterThan
         else
-            EqualTo
+            Comparison.EqualTo
 
 }
 
@@ -300,19 +347,19 @@ instance Order[BigInt] {
 
     pub def compare(x: BigInt, y: BigInt): Comparison =
         if ($BIGINT_LT$(x, y))
-            LessThan
+            Comparison.LessThan
         else if ($BIGINT_GT$(x, y))
-            GreaterThan
+            Comparison.GreaterThan
         else
-            EqualTo
+            Comparison.EqualTo
 
 }
 
 instance Order[String] {
 
     pub def compare(x: String, y: String): Comparison =
-        import java.lang.String.compareTo(String);
-        Order.fromInt(x.compareTo(y) as & Pure)
+        import java.lang.String.compareTo(String): Int32 \ {};
+        Comparison.fromInt32((x `compareTo` y))
 
 }
 
@@ -544,7 +591,7 @@ instance Order[(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13)] with Or
         lazy (x10 <=> y10) `thenCompare`
         lazy (x11 <=> y11) `thenCompare`
         lazy (x12 <=> y12) `thenCompare`
-        lazy (x13 <=> y13) 
+        lazy (x13 <=> y13)
 }
 
 instance Order[(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14)] with Order[a1], Order[a2], Order[a3], Order[a4], Order[a5], Order[a6], Order[a7], Order[a8], Order[a9], Order[a10], Order[a11], Order[a12], Order[a13], Order[a14] {

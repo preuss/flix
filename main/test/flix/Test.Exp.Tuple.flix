@@ -1,7 +1,7 @@
 namespace Test/Exp/Tuple {
 
     @test
-    def testUnitTuple01(): () = ()
+    def testUnitTuple01(): Unit = ()
 
     @test
     def testBoolTuple01(): (Bool, Bool) = (true, false)
@@ -26,6 +26,12 @@ namespace Test/Exp/Tuple {
 
     @test
     def testFloat64Tuple02(): (Float64, Float64, Float64) = (123.456f64, 456.789f64, 789.123f64)
+
+    @test
+    def testBigDecimalTuple01(): (BigDecimal, BigDecimal) = (123.456ff, 456.789ff)
+
+    @test
+    def testBigDecimalTuple02(): (BigDecimal, BigDecimal, BigDecimal) = (123.456ff, 456.789ff, 789.123ff)
 
     @test
     def testInt8Tuple01(): (Int8, Int8) = (1i8, 2i8)
@@ -64,93 +70,84 @@ namespace Test/Exp/Tuple {
     def testStringTuple02(): (String, String, String) = ("abc", "def", "geh")
 
     @test
-    def testRecordTuple01(): ({x: Int}, {x: Int}) = ({x = 1}, {x = 2})
+    def testRecordTuple01(): ({x = Int32}, {x = Int32}) = ({x = 1}, {x = 2})
 
     @test
-    def testRecordTuple02(): ({x: Int}, {x: Int}, {x: Int}) = ({x = 1}, {x = 2}, {x = 3})
+    def testRecordTuple02(): ({x = Int32}, {x = Int32}, {x = Int32}) = ({x = 1}, {x = 2}, {x = 3})
 
     @test
-    def testTupleTuple01(): (Int, (Int, Int)) = (1, (2, 3))
+    def testTupleTuple01(): (Int32, (Int32, Int32)) = (1, (2, 3))
 
     @test
-    def testTupleTuple02(): ((Int, Int), Int) = ((1, 2), 3)
+    def testTupleTuple02(): ((Int32, Int32), Int32) = ((1, 2), 3)
 
     @test
-    def testTupleTuple03(): ((Int, Int), (Int, Int)) = ((1, 2), (3, 4))
+    def testTupleTuple03(): ((Int32, Int32), (Int32, Int32)) = ((1, 2), (3, 4))
 
     @test
-    def testTupleTuple04(): (Int, (Int, (Int, Int))) = (1, (2, (3, 4)))
+    def testTupleTuple04(): (Int32, (Int32, (Int32, Int32))) = (1, (2, (3, 4)))
 
     @test
-    def testTupleTuple05(): (((Int, Int), Int), Int) = (((1, 2), 3), 4)
+    def testTupleTuple05(): (((Int32, Int32), Int32), Int32) = (((1, 2), 3), 4)
 
     @test
-    def testTupleTuple06(): ((Int, Int), (Int, Int), (Int, Int)) = ((1, 2), (3, 4), (5, 6))
+    def testTupleTuple06(): ((Int32, Int32), (Int32, Int32), (Int32, Int32)) = ((1, 2), (3, 4), (5, 6))
 
     @test
-    def testOptionTuple01(): (Option[Int], Option[Int]) = (None, None)
+    def testOptionTuple01(): (Option[Int32], Option[Int32]) = (None, None)
 
     @test
-    def testOptionTuple02(): (Option[Int], Option[Int]) = (None, Some(2))
+    def testOptionTuple02(): (Option[Int32], Option[Int32]) = (None, Some(2))
 
     @test
-    def testOptionTuple03(): (Option[Int], Option[Int]) = (Some(1), None)
+    def testOptionTuple03(): (Option[Int32], Option[Int32]) = (Some(1), None)
 
     @test
-    def testOptionTuple04(): (Option[Int], Option[Int]) = (Some(1), Some(2))
+    def testOptionTuple04(): (Option[Int32], Option[Int32]) = (Some(1), Some(2))
 
     @test
-    def testOptionTuple05(): Option[(Int, Int)] = None
+    def testOptionTuple05(): Option[(Int32, Int32)] = None
 
     @test
-    def testOptionTuple06(): Option[(Int, Int)] = Some((1, 2))
+    def testOptionTuple06(): Option[(Int32, Int32)] = Some((1, 2))
 
     @test
-    def testResultTuple01(): (Result[Int, Int], Result[Int, Int]) = (Ok(1), Ok(2))
+    def testResultTuple01(): (Result[Int32, Int32], Result[Int32, Int32]) = (Ok(1), Ok(2))
 
     @test
-    def testResultTuple02(): (Result[Int, Int], Result[Int, Int]) = (Ok(1), Err(2))
+    def testResultTuple02(): (Result[Int32, Int32], Result[Int32, Int32]) = (Ok(1), Err(2))
 
     @test
-    def testResultTuple03(): (Result[Int, Int], Result[Int, Int]) = (Err(1), Ok(2))
+    def testResultTuple03(): (Result[Int32, Int32], Result[Int32, Int32]) = (Err(1), Ok(2))
 
     @test
-    def testResultTuple04(): (Result[Int, Int], Result[Int, Int]) = (Err(1), Err(2))
+    def testResultTuple04(): (Result[Int32, Int32], Result[Int32, Int32]) = (Err(1), Err(2))
 
     @test
-    def testResultTuple05(): Result[Int, (Int, Int)] = Ok(1)
+    def testResultTuple05(): Result[(Int32, Int32), Int32] = Ok(1)
 
     @test
-    def testResultTuple06(): Result[Int, (Int, Int)] = Err((1, 2))
+    def testResultTuple06(): Result[(Int32, Int32), Int32] = Err((1, 2))
 
     @test
-    def testListTuple01(): (List[Int], List[Int]) = (Nil, Nil)
+    def testListTuple01(): (List[Int32], List[Int32]) = (Nil, Nil)
 
     @test
-    def testListTuple02(): (List[Int], List[Int]) = (1 :: Nil, 2 :: Nil)
+    def testListTuple02(): (List[Int32], List[Int32]) = (1 :: Nil, 2 :: Nil)
 
     @test
-    def testListTuple03(): List[(Int, Int)] = Nil
+    def testListTuple03(): List[(Int32, Int32)] = Nil
 
     @test
-    def testListTuple04(): List[(Int, Int)] = (1, 2) :: Nil
+    def testListTuple04(): List[(Int32, Int32)] = (1, 2) :: Nil
 
     @test
-    def testListTuple05(): List[(Int, Int)] = (1, 2) :: (3, 4) :: Nil
+    def testListTuple05(): List[(Int32, Int32)] = (1, 2) :: (3, 4) :: Nil
 
-    enum Option[t] {
-        case None,
-        case Some(t)
-    }
+    @test
+    def testNamedTuple01(): {a = Int32} = (a = 123)
 
-    enum Result[t, e] {
-        case Ok(t),
-        case Err(e)
-    }
-
-    enum List[t] {
-        case Nil,
-        case Cons(t, List[t])
-    }
+    @test
+    def testNamedTuple02(): ({a = Int32}, {b = Char}) = (a = 123, b = 'x')
 
 }

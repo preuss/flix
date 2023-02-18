@@ -1,30 +1,22 @@
 /// A function that sends every element of a list
-def send(o: Channel[Int], l: List[Int]): Unit & Impure =
+def sendAll(l: List[Int32], s: Sender[Int32, r]): Unit \ IO =
     match l {
         case Nil     => ()
-        case x :: xs => o <- x; send(o, xs)
+        case x :: xs => Channel.send(x, s); sendAll(xs, s)
     }
 
 /// A function that receives n elements
 /// and collects them into a list.
-def recv(i: Channel[Int], n: Int): List[Int] & Impure =
+def recvN(n: Int32, r: Receiver[Int32, r]): List[Int32] \ IO =
     match n {
         case 0 => Nil
-        case _ => (<- i) :: recv(i, n - 1)
+        case _ => Channel.recv(r) :: recvN(n - 1, r)
     }
 
-/// A function that calls receive and sends the result on d.
-def wait(i: Channel[Int], n: Int, d: Channel[List[Int]]): Unit & Impure =
-    d <- recv(i, n);
-    ()
-
 /// Spawn a process for send and wait, and print the result.
-def main(_args: Array[String]): Int32 & Impure = {
+def main(): Unit \ IO = region r {
     let l = 1 :: 2 :: 3 :: Nil;
-    let c = chan Int 100;
-    let d = chan List[Int] 100;
-    spawn send(c, l);
-    spawn wait(c, List.length(l), d);
-    (<- d) |> println;
-    0 // exit code
+    let (tx, rx) = Channel.buffered(r, 100);
+    spawn sendAll(l, tx) @ r;
+    spawn recvN(List.length(l), rx) @ r
 }

@@ -1,5 +1,6 @@
 /*
  * Copyright 2017 Magnus Madsen
+ * Copyright 2021 Jonathan Lindegaard Starup
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,46 +41,6 @@ sealed trait JvmType {
 }
 
 object JvmType {
-
-  /**
-    * The Flix Context class.
-    */
-  val Context: JvmType.Reference = Reference(JvmName.Context)
-
-  /**
-    * The `ca.uwaterloo.flix.api.Unit` type
-    */
-  val Unit: JvmType.Reference = Reference(JvmName.Runtime.Value.Unit)
-
-  /**
-    * The `java.lang.BigInteger` type.
-    */
-  val BigInteger: JvmType.Reference = Reference(JvmName.BigInteger)
-
-  /**
-    * The `java.lang.Object` type.
-    */
-  val Object: JvmType.Reference = Reference(JvmName.Object)
-
-  /**
-    * The `java.lang.String` type.
-    */
-  val String: JvmType.Reference = Reference(JvmName.String)
-
-  /**
-    * The `ca.uwaterloo.flix.runtime.interpreter.Spawnable` type.
-    */
-  val Spawnable: JvmType.Reference = Reference(JvmName.Spawnable)
-
-  /**
-    * The `scala.math.package$` type
-    */
-  val ScalaMathPkg: JvmType.Reference = Reference(JvmName.ScalaMathPkg)
-
-  val ProxyObject: JvmType.Reference = Reference(JvmName.ProxyObject)
-
-  val Function: JvmType.Reference = Reference(JvmName.Function)
-
   /**
     * Represents the void type.
     */
@@ -130,4 +91,19 @@ object JvmType {
     */
   case class Reference(name: JvmName) extends JvmType
 
+  //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Java Types ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  //
+
+  val AtomicLong: JvmType.Reference = Reference(JvmName.AtomicLong)
+  val BigDecimal: JvmType.Reference = Reference(BackendObjType.BigDecimal.jvmName)
+  val BigInteger: JvmType.Reference = Reference(BackendObjType.BigInt.jvmName)
+  val Object: JvmType.Reference = Reference(BackendObjType.JavaObject.jvmName)
+  val String: JvmType.Reference = Reference(BackendObjType.String.jvmName)
+
+  //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Flix Types ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  //
+
+  val Unit: JvmType.Reference = Reference(BackendObjType.Unit.jvmName)
 }

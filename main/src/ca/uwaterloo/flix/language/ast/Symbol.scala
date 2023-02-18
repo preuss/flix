@@ -17,15 +17,16 @@
 package ca.uwaterloo.flix.language.ast
 
 import ca.uwaterloo.flix.api.Flix
+import ca.uwaterloo.flix.language.ast.Ast.{BoundBy, VarText}
 import ca.uwaterloo.flix.language.ast.Name.{Ident, NName}
 import ca.uwaterloo.flix.util.InternalCompilerException
 
-object Symbol {
+import java.util.Objects
+import scala.collection.immutable.SortedSet
 
-  /**
-    * The main symbol.
-    */
-  val Main: Symbol.DefnSym = Symbol.mkDefnSym("main")
+sealed trait Symbol
+
+object Symbol {
 
   /**
     * Returns a fresh def symbol based on the given symbol.
@@ -33,22 +34,6 @@ object Symbol {
   def freshDefnSym(sym: DefnSym)(implicit flix: Flix): DefnSym = {
     val id = Some(flix.genSym.freshId())
     new DefnSym(id, sym.namespace, sym.text, sym.loc)
-  }
-
-  /**
-    * Returns a fresh def symbol with the given text.
-    */
-  def freshDefnSym(text: String, loc: SourceLocation)(implicit flix: Flix): DefnSym = {
-    val id = Some(flix.genSym.freshId())
-    new DefnSym(id, Nil, text, loc)
-  }
-
-  /**
-    * Returns a fresh def symbol with the given text in the given namespace.
-    */
-  def freshDefnSym(ns: List[String], text: String, loc: SourceLocation)(implicit flix: Flix): DefnSym = {
-    val id = Some(flix.genSym.freshId())
-    new DefnSym(id, ns, text, loc)
   }
 
   /**
@@ -63,21 +48,35 @@ object Symbol {
     * Returns a fresh variable symbol based on the given symbol.
     */
   def freshVarSym(sym: VarSym)(implicit flix: Flix): VarSym = {
-    new VarSym(flix.genSym.freshId(), sym.text, sym.tvar, sym.loc)
+    new VarSym(flix.genSym.freshId(), sym.text, sym.tvar, sym.boundBy, sym.loc)
   }
 
   /**
     * Returns a fresh variable symbol for the given identifier.
     */
-  def freshVarSym(ident: Name.Ident)(implicit flix: Flix): VarSym = {
-    new VarSym(flix.genSym.freshId(), ident.name, Type.freshVar(Kind.Star), ident.loc)
+  def freshVarSym(ident: Name.Ident, boundBy: BoundBy)(implicit flix: Flix): VarSym = {
+    new VarSym(flix.genSym.freshId(), ident.name, Type.freshVar(Kind.Star, ident.loc), boundBy, ident.loc)
   }
 
   /**
     * Returns a fresh variable symbol with the given text.
     */
-  def freshVarSym(text: String, loc: SourceLocation)(implicit flix: Flix): VarSym = {
-    new VarSym(flix.genSym.freshId(), text, Type.freshVar(Kind.Star), loc)
+  def freshVarSym(text: String, boundBy: BoundBy, loc: SourceLocation)(implicit flix: Flix): VarSym = {
+    new VarSym(flix.genSym.freshId(), text, Type.freshVar(Kind.Star, loc), boundBy, loc)
+  }
+
+  /**
+    * Returns a fresh type variable symbol with the given text.
+    */
+  def freshKindedTypeVarSym(text: Ast.VarText, kind: Kind, isRegion: Boolean, loc: SourceLocation)(implicit flix: Flix): KindedTypeVarSym = {
+    new KindedTypeVarSym(flix.genSym.freshId(), text, kind, isRegion, loc)
+  }
+
+  /**
+    * Returns a fresh type variable symbol with the given text.
+    */
+  def freshUnkindedTypeVarSym(text: Ast.VarText, isRegion: Boolean, loc: SourceLocation)(implicit flix: Flix): UnkindedTypeVarSym = {
+    new UnkindedTypeVarSym(flix.genSym.freshId(), text, isRegion: Boolean, loc)
   }
 
   /**
@@ -117,6 +116,13 @@ object Symbol {
   }
 
   /**
+    * Returns the restrictable enum symbol for the given name `ident` in the given namespace `ns`.
+    */
+  def mkRestrictableEnumSym(ns: NName, ident: Ident, cases: List[Ident]): RestrictableEnumSym = {
+    new RestrictableEnumSym(ns.parts, ident.name, cases, ident.loc)
+  }
+
+  /**
     * Returns the enum symbol for the given fully qualified name.
     */
   def mkEnumSym(fqn: String): EnumSym = split(fqn) match {
@@ -125,10 +131,32 @@ object Symbol {
   }
 
   /**
+    * Returns the case symbol for the given name `ident` in the given `enum`.
+    */
+  def mkCaseSym(sym: Symbol.EnumSym, ident: Ident): CaseSym = {
+    new CaseSym(sym, ident.name, ident.loc)
+  }
+
+  /**
+    * Returns the restrictable case symbol for the given name `ident` in the given `enum`.
+    */
+  def mkRestrictableCaseSym(sym: Symbol.RestrictableEnumSym, ident: Ident): RestrictableCaseSym = {
+    new RestrictableCaseSym(sym, ident.name, ident.loc)
+  }
+
+  /**
     * Returns the class symbol for the given name `ident` in the given namespace `ns`.
     */
   def mkClassSym(ns: NName, ident: Ident): ClassSym = {
     new ClassSym(ns.parts, ident.name, ident.loc)
+  }
+
+  /**
+    * Returns the class symbol for the given fully qualified name
+    */
+  def mkClassSym(fqn: String): ClassSym = split(fqn) match {
+    case None => new ClassSym(Nil, fqn, SourceLocation.Unknown)
+    case Some((ns, name)) => new ClassSym(ns, name, SourceLocation.Unknown)
   }
 
   /**
@@ -161,14 +189,37 @@ object Symbol {
   }
 
   /**
+    * Returns the type alias symbol for the given fully qualified name
+    */
+  def mkTypeAliasSym(fqn: String): TypeAliasSym = split(fqn) match {
+    case None => new TypeAliasSym(Nil, fqn, SourceLocation.Unknown)
+    case Some((ns, name)) => new TypeAliasSym(ns, name, SourceLocation.Unknown)
+  }
+
+  /**
+    * Returns the effect symbol for the given name `ident` in the given namespace `ns`.
+    */
+  def mkEffectSym(ns: NName, ident: Ident): EffectSym = {
+    new EffectSym(ns.parts, ident.name, ident.loc)
+  }
+
+  /**
+    * Returns the operation symbol for the given name `ident` in the effect associated with the given effect symbol `effectSym`.
+    */
+  def mkOpSym(effectSym: EffectSym, ident: Name.Ident): OpSym = {
+    new OpSym(effectSym, ident.name, ident.loc)
+  }
+
+  /**
     * Variable Symbol.
     *
-    * @param id   the globally unique name of the symbol.
-    * @param text the original name, as it appears in the source code, of the symbol
-    * @param tvar the type variable associated with the symbol.
-    * @param loc  the source location associated with the symbol.
+    * @param id      the globally unique name of the symbol.
+    * @param text    the original name, as it appears in the source code, of the symbol
+    * @param tvar    the type variable associated with the symbol. This type variable always has kind `Star`.
+    * @param boundBy the way the variable is bound.
+    * @param loc     the source location associated with the symbol.
     */
-  final class VarSym(val id: Int, val text: String, val tvar: Type.Var, val loc: SourceLocation) {
+  final class VarSym(val id: Int, val text: String, val tvar: Type.Var, val boundBy: BoundBy, val loc: SourceLocation) extends Ordered[VarSym] with Symbol {
 
     /**
       * The internal stack offset. Computed during variable numbering.
@@ -176,9 +227,9 @@ object Symbol {
     private var stackOffset: Option[Int] = None
 
     /**
-      * Returns `true`if `this` symbol is a wildcard.
+      * Returns `true` if `this` symbol is a wildcard.
       */
-    def isWild(): Boolean = text.startsWith("_")
+    def isWild: Boolean = text.startsWith("_")
 
     /**
       * Returns the stack offset of `this` variable symbol.
@@ -186,7 +237,7 @@ object Symbol {
       * Throws [[InternalCompilerException]] if the stack offset has not been set.
       */
     def getStackOffset: Int = stackOffset match {
-      case None => throw InternalCompilerException(s"Unknown offset for variable symbol $toString.")
+      case None => throw InternalCompilerException(s"Unknown offset for variable symbol $toString.", loc)
       case Some(offset) => offset
     }
 
@@ -196,7 +247,7 @@ object Symbol {
     def setStackOffset(offset: Int): Unit = stackOffset match {
       case None => stackOffset = Some(offset)
       case Some(_) =>
-        throw InternalCompilerException(s"Offset already set for variable symbol $toString.")
+        throw InternalCompilerException(s"Offset already set for variable symbol: '$toString' near ${loc.format}.", loc)
     }
 
     /**
@@ -213,29 +264,109 @@ object Symbol {
     override val hashCode: Int = id
 
     /**
+      * Return the comparison of `this` symbol to `that` symol.
+      */
+    override def compare(that: VarSym): Int = this.id.compare(that.id)
+
+    /**
       * Human readable representation.
       */
-    override def toString: String = text + "$" + id
+    override def toString: String = text + Flix.Delimiter + id
+  }
+
+  /**
+    * Kinded type variable symbol.
+    */
+  final class KindedTypeVarSym(val id: Int, val text: Ast.VarText, val kind: Kind, val isRegion: Boolean, val loc: SourceLocation) extends Symbol with Ordered[KindedTypeVarSym] with Locatable with Sourceable {
+
+    /**
+      * Returns `true` if `this` variable is non-synthetic.
+      */
+    def isReal: Boolean = loc.locationKind == SourceKind.Real
+
+    /**
+      * Returns the same symbol with the given kind.
+      */
+    def withKind(newKind: Kind): KindedTypeVarSym = new KindedTypeVarSym(id, text, newKind, isRegion, loc)
+
+    /**
+      * Returns the same symbol without a kind.
+      */
+    def withoutKind: UnkindedTypeVarSym = new UnkindedTypeVarSym(id, text, isRegion, loc)
+
+    def withText(newText: Ast.VarText): KindedTypeVarSym = new KindedTypeVarSym(id, newText, kind, isRegion, loc)
+
+    override def compare(that: KindedTypeVarSym): Int = that.id - this.id
+
+    override def equals(that: Any): Boolean = that match {
+      case tvar: KindedTypeVarSym => this.id == tvar.id
+      case _ => false
+    }
+
+    override val hashCode: Int = id
+
+    /**
+      * Returns a string representation of the symbol.
+      */
+    override def toString: String = {
+      val string = text match {
+        case VarText.Absent => "tvar"
+        case VarText.SourceText(s) => s
+      }
+      string + Flix.Delimiter + id
+    }
+
+    /**
+      * Returns true if this symbol is a wildcard.
+      */
+    def isWild: Boolean = text match {
+      case VarText.Absent => false
+      case VarText.SourceText(s) => s.startsWith("_")
+    }
+  }
+
+  /**
+    * Unkinded type variable symbol.
+    */
+  final class UnkindedTypeVarSym(val id: Int, val text: Ast.VarText, val isRegion: Boolean, val loc: SourceLocation) extends Symbol with Ordered[UnkindedTypeVarSym] with Locatable with Sourceable {
+
+    /**
+      * Ascribes this UnkindedTypeVarSym with the given kind.
+      */
+    def withKind(k: Kind): KindedTypeVarSym = new KindedTypeVarSym(id, text, k, isRegion, loc)
+
+    override def compare(that: UnkindedTypeVarSym): Int = that.id - this.id
+
+    override def equals(that: Any): Boolean = that match {
+      case tvar: UnkindedTypeVarSym => this.id == tvar.id
+      case _ => false
+    }
+
+    override val hashCode: Int = id
+
+    /**
+      * Returns a string representation of the symbol.
+      */
+    override def toString: String = {
+      val string = text match {
+        case VarText.Absent => "tvar"
+        case VarText.SourceText(s) => s
+      }
+      string + Flix.Delimiter + id
+    }
   }
 
   /**
     * Definition Symbol.
     */
-  final class DefnSym(val id: Option[Int], val namespace: List[String], val text: String, val loc: SourceLocation) {
-
-    /**
-      * Returns `true` if `this` symbol is equal to the main symbol.
-      *
-      * NB: Must use equality because there could be more than once instance of the main symbol.
-      */
-    def isMain: Boolean = this == Symbol.Main
+  final class DefnSym(val id: Option[Int], val namespace: List[String], val text: String, val loc: SourceLocation) extends Sourceable with Locatable with Symbol {
 
     /**
       * Returns the name of `this` symbol.
       */
     def name: String = id match {
       case None => text
-      case Some(i) => text + "$" + i
+      case Some(i) => text + Flix.Delimiter + i
     }
 
     /**
@@ -254,13 +385,13 @@ object Symbol {
     /**
       * Human readable representation.
       */
-    override def toString: String = if (namespace.isEmpty) name else namespace.mkString("/") + "." + name
+    override val toString: String = if (namespace.isEmpty) name else namespace.mkString("/") + "." + name
   }
 
   /**
     * Enum Symbol.
     */
-  final class EnumSym(val namespace: List[String], val name: String, val loc: SourceLocation) {
+  final class EnumSym(val namespace: List[String], val name: String, val loc: SourceLocation) extends Symbol {
     /**
       * Returns `true` if this symbol is equal to `that` symbol.
       */
@@ -277,13 +408,105 @@ object Symbol {
     /**
       * Human readable representation.
       */
-    override def toString: String = name
+    override def toString: String = if (namespace.isEmpty) name else namespace.mkString("/") + "." + name
+  }
+
+  /**
+    * Restrictable Enum Symbol.
+    */
+  final class RestrictableEnumSym(val namespace: List[String], val name: String, cases: List[Name.Ident], val loc: SourceLocation) extends Symbol {
+
+    // NB: it is critical that this be either a lazy val or a def, since otherwise `this` is not fully instantiated
+    /**
+      * The universe of cases associated with this restrictable enum.
+      */
+    def universe: SortedSet[Symbol.RestrictableCaseSym] = cases.map(Symbol.mkRestrictableCaseSym(this, _)).to(SortedSet)
+
+    /**
+      * Returns `true` if this symbol is equal to `that` symbol.
+      */
+    override def equals(obj: scala.Any): Boolean = obj match {
+      case that: RestrictableEnumSym => this.namespace == that.namespace && this.name == that.name
+      case _ => false
+    }
+
+    /**
+      * Returns the hash code of this symbol.
+      */
+    override val hashCode: Int = 7 * namespace.hashCode() + 11 * name.hashCode
+
+    /**
+      * Human readable representation.
+      */
+    override def toString: String = if (namespace.isEmpty) name else namespace.mkString("/") + "." + name
+  }
+
+  /**
+    * Case Symbol.
+    */
+  final class CaseSym(val enumSym: Symbol.EnumSym, val name: String, val loc: SourceLocation) extends Symbol {
+    /**
+      * Returns `true` if this symbol is equal to `that` symbol.
+      */
+    override def equals(obj: scala.Any): Boolean = obj match {
+      case that: CaseSym => this.enumSym == that.enumSym && this.name == that.name
+      case _ => false
+    }
+
+    /**
+      * Returns the hash code of this symbol.
+      */
+    override val hashCode: Int = Objects.hash(enumSym, name)
+
+    /**
+      * Human readable representation.
+      */
+    override def toString: String = enumSym.toString + "." + name
+
+    /**
+      * The symbol's namespace.
+      */
+    def namespace: List[String] = enumSym.namespace :+ enumSym.name
+  }
+
+  /**
+    * Restrictable Case Symbol.
+    */
+  final class RestrictableCaseSym(val enumSym: Symbol.RestrictableEnumSym, val name: String, val loc: SourceLocation) extends Symbol with Ordered[RestrictableCaseSym] {
+    /**
+      * Returns `true` if this symbol is equal to `that` symbol.
+      */
+    override def equals(obj: scala.Any): Boolean = obj match {
+      case that: RestrictableCaseSym => this.enumSym == that.enumSym && this.name == that.name
+      case _ => false
+    }
+
+    /**
+      * Returns the hash code of this symbol.
+      */
+    override val hashCode: Int = Objects.hash(enumSym, name)
+
+    /**
+      * Human readable representation.
+      */
+    override def toString: String = enumSym.toString + "." + name
+
+    /**
+      * The symbol's namespace.
+      */
+    def namespace: List[String] = enumSym.namespace :+ enumSym.name
+
+    /**
+      * Comparison.
+      */
+    override def compare(that: RestrictableCaseSym): Int = this.toString.compare(that.toString)
+
   }
 
   /**
     * Class Symbol.
     */
-  final class ClassSym(val namespace: List[String], val name: String, val loc: SourceLocation) {
+  final class ClassSym(val namespace: List[String], val name: String, val loc: SourceLocation) extends Sourceable with Symbol {
     /**
       * Returns `true` if this symbol is equal to `that` symbol.
       */
@@ -301,12 +524,17 @@ object Symbol {
       * Human readable representation.
       */
     override def toString: String = if (namespace.isEmpty) name else namespace.mkString("/") + "." + name
+
+    /**
+      * Returns the source of `this`.
+      */
+    override def src: Ast.Source = loc.source
   }
 
   /**
     * Signature Symbol.
     */
-  final class SigSym(val clazz: Symbol.ClassSym, val name: String, val loc: SourceLocation) {
+  final class SigSym(val clazz: Symbol.ClassSym, val name: String, val loc: SourceLocation) extends Symbol {
     /**
       * Returns `true` if this symbol is equal to `that` symbol.
       */
@@ -323,13 +551,18 @@ object Symbol {
     /**
       * Human readable representation.
       */
-    override def toString: String = if (clazz.namespace.isEmpty) name else clazz.namespace.mkString("/") + "." + name
+    override def toString: String = clazz.toString + "." + name
+
+    /**
+      * The symbol's namespace.
+      */
+    def namespace: List[String] = clazz.namespace :+ clazz.name
   }
 
   /**
     * Label Symbol.
     */
-  final class LabelSym(val id: Int, val text: String) {
+  final class LabelSym(val id: Int, val text: String) extends Symbol {
     /**
       * Returns `true` if this symbol is equal to `that` symbol.
       */
@@ -346,13 +579,13 @@ object Symbol {
     /**
       * Human readable representation.
       */
-    override def toString: String = text + "$" + id
+    override def toString: String = text + Flix.Delimiter + id
   }
 
   /**
     * Hole Symbol.
     */
-  final class HoleSym(val namespace: List[String], val name: String, val loc: SourceLocation) {
+  final class HoleSym(val namespace: List[String], val name: String, val loc: SourceLocation) extends Symbol {
     /**
       * Returns `true` if this symbol is equal to `that` symbol.
       */
@@ -375,7 +608,7 @@ object Symbol {
   /**
     * TypeAlias Symbol.
     */
-  final class TypeAliasSym(val namespace: List[String], val name: String, val loc: SourceLocation) {
+  final class TypeAliasSym(val namespace: List[String], val name: String, val loc: SourceLocation) extends Symbol {
     /**
       * Returns `true` if this symbol is equal to `that` symbol.
       */
@@ -393,6 +626,92 @@ object Symbol {
       * Human readable representation.
       */
     override def toString: String = name
+  }
+
+  /**
+    * Effect symbol.
+    */
+  final class EffectSym(val namespace: List[String], val name: String, val loc: SourceLocation) extends Sourceable with Ordered[EffectSym] with Symbol {
+    /**
+      * Returns `true` if this symbol is equal to `that` symbol.
+      */
+    override def equals(obj: scala.Any): Boolean = obj match {
+      case that: EffectSym => this.namespace == that.namespace && this.name == that.name
+      case _ => false
+    }
+
+    /**
+      * Returns the hash code of this symbol.
+      */
+    override val hashCode: Int = Objects.hash(namespace, name)
+
+    /**
+      * Human readable representation.
+      */
+    override def toString: String = if (namespace.isEmpty) name else namespace.mkString("/") + "." + name
+
+    /**
+      * Returns the source of `this`.
+      */
+    override def src: Ast.Source = loc.source
+
+    /**
+      * Compares `this` and `that` effect sym.
+      *
+      * Fairly arbitrary comparison since the purpose is to allow for mapping the object.
+      */
+    override def compare(that: EffectSym): Int = this.toString.compare(that.toString)
+  }
+
+  /**
+    * Effect Operation Symbol.
+    */
+  final class OpSym(val eff: Symbol.EffectSym, val name: String, val loc: SourceLocation) extends Symbol {
+    /**
+      * Returns `true` if this symbol is equal to `that` symbol.
+      */
+    override def equals(obj: scala.Any): Boolean = obj match {
+      case that: OpSym => this.eff == that.eff && this.name == that.name
+      case _ => false
+    }
+
+    /**
+      * Returns the hash code of this symbol.
+      */
+    override val hashCode: Int = Objects.hash(eff, name)
+
+    /**
+      * Human readable representation.
+      */
+    override def toString: String = eff.toString + "." + name
+
+    /**
+      * The symbol's namespace.
+      */
+    def namespace: List[String] = eff.namespace :+ eff.name
+  }
+
+  /**
+    * Module symbol.
+    */
+  final class ModuleSym(val ns: List[String]) extends Symbol {
+    /**
+      * Returns `true` if this symbol is equal to `that` symbol.
+      */
+    override def equals(obj: scala.Any): Boolean = obj match {
+      case that: ModuleSym => this.ns == that.ns
+      case _ => false
+    }
+
+    /**
+      * Returns the hash code of this symbol.
+      */
+    override val hashCode: Int = Objects.hash(ns)
+
+    /**
+      * Human readable representation.
+      */
+    override def toString: String = ns.mkString("/")
   }
 
   /**

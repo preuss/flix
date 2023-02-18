@@ -17,7 +17,7 @@
 ///
 /// A type class for types that can be converted to strings.
 ///
-pub lawless class ToString[a] {
+pub class ToString[a] {
     ///
     /// Returns a string representation of the given x.
     ///
@@ -37,44 +37,44 @@ instance ToString[Bool] {
 
 instance ToString[Char] {
     pub def toString(x: Char): String =
-        import java.lang.Character:toString(Char);
-        x.toString() as & Pure
+        import static java.lang.Character.toString(Char): String \ {};
+        toString(x)
 }
 
 instance ToString[Float32] {
     pub def toString(x: Float32): String =
-        import java.lang.Float:toString(Float32);
-        x.toString() as & Pure
+        import static java.lang.Float.toString(Float32): String \ {};
+        toString(x)
 }
 
 instance ToString[Float64] {
     pub def toString(x: Float64): String =
-        import java.lang.Double:toString(Float64);
-        x.toString() as & Pure
+        import static java.lang.Double.toString(Float64): String \ {};
+        toString(x)
 }
 
 instance ToString[Int8] {
     pub def toString(x: Int8): String =
-        import java.lang.Byte:toString(Int8);
-        x.toString() as & Pure
+        import static java.lang.Byte.toString(Int8): String \ {};
+        toString(x)
 }
 
 instance ToString[Int16] {
     pub def toString(x: Int16): String =
-        import java.lang.Short:toString(Int16);
-        x.toString() as & Pure
+        import static java.lang.Short.toString(Int16): String \ {};
+        toString(x)
 }
 
 instance ToString[Int32] {
     pub def toString(x: Int32): String =
-        import java.lang.Integer:toString(Int32);
-        x.toString() as & Pure
+        import static java.lang.Integer.toString(Int32): String \ {};
+        toString(x)
 }
 
 instance ToString[Int64] {
     pub def toString(x: Int64): String =
-        import java.lang.Long:toString(Int64);
-        x.toString() as & Pure
+        import static java.lang.Long.toString(Int64): String \ {};
+        toString(x)
 }
 
 instance ToString[String] {
@@ -83,8 +83,14 @@ instance ToString[String] {
 
 instance ToString[BigInt] {
     pub def toString(x: BigInt): String =
-        import java.math.BigInteger.toString();
-        x.toString() as & Pure
+        import java.math.BigInteger.toString(): String \ {};
+        toString(x)
+}
+
+instance ToString[BigDecimal] {
+    pub def toString(x: BigDecimal): String =
+        import java.math.BigDecimal.toString(): String \ {};
+        toString(x)
 }
 
 instance ToString[(a1, a2)] with ToString[a1], ToString[a2] {
@@ -185,16 +191,15 @@ instance ToString[(a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, 
     }
 }
 
-instance ToString[Array[a]] with ToString[a] {
-    pub def toString(a: Array[a]): String = ToStringOps.arrayToStringHelper(a, 0, "")
-}
-
-namespace ToStringOps {
-    pub def arrayToStringHelper(a: Array[a], i: Int32, acc: String): String with ToString[a] =
-        if (i < a.length) {
-            if (i == 0) arrayToStringHelper(a, i + 1, "${a[i]}") as & Pure
-            else arrayToStringHelper(a, i + 1, "${acc}, ${a[i]}") as & Pure
-        } else {
-            "[${acc}]"
-        }
+instance ToString[Array[a, r]] with ToString[a] {
+    pub def toString(a: Array[a, r]): String =
+        def loop(i, acc) =
+            // NB: we use the intrinsic $ARRAY_LENGTH$ since Array.flix is not in the MinLib
+            if (i < $ARRAY_LENGTH$(a)) {
+                if (i == 0) unsafe_cast loop(i + 1, "${$ARRAY_LOAD$(a, i)}") as _ \ {}
+                else unsafe_cast loop(i + 1, "${acc}, ${$ARRAY_LOAD$(a, i)}") as _ \ {}
+            } else {
+                "[${acc}]"
+            };
+        loop(0, "")
 }

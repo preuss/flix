@@ -3,7 +3,7 @@ namespace Test/Exp/Fixpoint/Solve/Lattice {
     enum Constant {
           case Top,
 
-        case Cst(Int),
+        case Cst(Int32),
 
           case Bot
     }
@@ -14,169 +14,167 @@ namespace Test/Exp/Fixpoint/Solve/Lattice {
 
     instance Eq[Constant] {
         pub def eq(x: Constant, y: Constant): Bool = match (x, y) {
-            case (Top, Top) => true
-            case (Cst(a), Cst(b)) => a == b
-            case (Bot, Bot) => true
+            case (Constant.Top, Constant.Top) => true
+            case (Constant.Cst(a), Constant.Cst(b)) => a == b
+            case (Constant.Bot, Constant.Bot) => true
             case _ => false
         }
     }
 
     instance PartialOrder[Constant] {
-        pub def partialCompare(e1: Constant, e2: Constant): Bool = match (e1, e2) {
-            case (Bot, _)           => true
-            case (Cst(n1), Cst(n2)) => n1 == n2
-            case (_, Top)           => true
+        pub def lessEqual(e1: Constant, e2: Constant): Bool = match (e1, e2) {
+            case (Constant.Bot, _)           => true
+            case (Constant.Cst(n1), Constant.Cst(n2)) => n1 == n2
+            case (_, Constant.Top)           => true
             case _                  => false
         }
     }
 
     instance JoinLattice[Constant] {
         pub def leastUpperBound(x: Constant, y: Constant): Constant = match (x, y) {
-            case (Bot, _)           => y
-            case (_, Bot)           => x
-            case (Cst(n1), Cst(n2)) => if (n1 == n2) x else Top
-            case _                  => Top
+            case (Constant.Bot, _)           => y
+            case (_, Constant.Bot)           => x
+            case (Constant.Cst(n1), Constant.Cst(n2)) => if (n1 == n2) x else Constant.Top
+            case _                  => Constant.Top
         }
     }
 
     instance MeetLattice[Constant] {
         pub def greatestLowerBound(e1: Constant, e2: Constant): Constant = match (e1, e2) {
-            case (Top, x)           => x
-            case (x, Top)           => x
-            case (Cst(n1), Cst(n2)) => if (n1 == n2) e1 else Bot
-            case _                  => Bot
+            case (Constant.Top, x)           => x
+            case (x, Constant.Top)           => x
+            case (Constant.Cst(n1), Constant.Cst(n2)) => if (n1 == n2) e1 else Constant.Bot
+            case _                  => Constant.Bot
         }
     }
 
     instance Order[Constant] {
         pub def compare(x: Constant, y: Constant): Comparison = match (x, y) {
-            case (Bot, Bot)         => EqualTo
-            case (Bot, Cst(_))      => LessThan
-            case (Bot, Top)         => LessThan
-            case (Cst(_), Bot)      => GreaterThan
-            case (Cst(v1), Cst(v2)) => v1 <=> v2
-            case (Cst(_), Top)      => LessThan
-            case (Top, Bot)         => GreaterThan
-            case (Top, Cst(_))      => GreaterThan
-            case (Top, Top)         => EqualTo
+            case (Constant.Bot, Constant.Bot)         => Comparison.EqualTo
+            case (Constant.Bot, Constant.Cst(_))      => Comparison.LessThan
+            case (Constant.Bot, Constant.Top)         => Comparison.LessThan
+            case (Constant.Cst(_), Constant.Bot)      => Comparison.GreaterThan
+            case (Constant.Cst(v1), Constant.Cst(v2)) => v1 <=> v2
+            case (Constant.Cst(_), Constant.Top)      => Comparison.LessThan
+            case (Constant.Top, Constant.Bot)         => Comparison.GreaterThan
+            case (Constant.Top, Constant.Cst(_))      => Comparison.GreaterThan
+            case (Constant.Top, Constant.Top)         => Comparison.EqualTo
         }
     }
 
-    instance Boxable[Constant] {
-        pub def box(x: Constant): Boxed = {
-            let value = x as ##java.lang.Object;
-            let compare = (o1, o2) -> Order.compare(o1 as Constant, o2 as Constant);
-            let toString = o -> ToString.toString(o as Constant);
-            BoxedObject(value, compare, toString)
-        }
-        pub def unbox(x: Boxed): Constant= match x {
-            case BoxedObject(v, _, _) => v as Constant
-            case _                    => ?bug
-        }
-    }
+    instance Boxable[Constant]
 
     instance ToString[Constant] {
         pub def toString(x: Constant): String = match x {
-            case Top    => "Top"
-            case Cst(n) => "Cst(${n})"
-            case Bot    => "Bot"
+            case Constant.Top    => "Constant.Top"
+            case Constant.Cst(n) => "Constant.Cst(${n})"
+            case Constant.Bot    => "Constant.Bot"
         }
     }
 
     def sum(e1: Constant, e2: Constant): Constant = match (e1, e2) {
-        case (Bot, _)           => Bot
-        case (_, Bot)           => Bot
-        case (Cst(n1), Cst(n2)) => Cst(n1 + n2)
-        case _                  => Top
+        case (Constant.Bot, _)           => Constant.Bot
+        case (_, Constant.Bot)           => Constant.Bot
+        case (Constant.Cst(n1), Constant.Cst(n2)) => Constant.Cst(n1 + n2)
+        case _                  => Constant.Top
     }
-
-    // TODO: How to extract lattice facts?
 
     @test
     def testFixpointLattice01(): Bool =
-        let _m = solve #{
-            LocalVar((); Top). LocalVar((); Top). LocalVar((); Top). LocalVar((); Top).
+        let m = solve #{
+            LocalVar((); Constant.Top). LocalVar((); Constant.Top). LocalVar((); Constant.Top). LocalVar((); Constant.Top).
         };
-        true // TODO
+        let ans = query m select t from LocalVar(_; t);
+        List.length(ans) == 1 and List.head(ans) == Some(Constant.Top)
 
     @test
     def testFixpointLattice02(): Bool =
-        let _m = solve #{
-            LocalVar((); Top). LocalVar((); Top). LocalVar((); Top). LocalVar((); Top).
+        let m = solve #{
+            LocalVar((); Constant.Bot). LocalVar((); Constant.Top). LocalVar((); Constant.Bot). LocalVar((); Constant.Top).
         };
-        true // TODO
+        let ans = query m select t from LocalVar(_; t);
+        List.length(ans) == 1 and List.head(ans) == Some(Constant.Top)
 
     @test
     def testFixpointLattice03(): Bool =
-        let _m = solve #{
-            LocalVar((); Cst(39)).
+        let m = solve #{
+            LocalVar((); Constant.Cst(39)).
         };
-        true // TODO
+        let ans = query m select t from LocalVar(_; t);
+        List.length(ans) == 1 and List.head(ans) == Some(Constant.Cst(39))
 
     @test
     def testFixpointLattice04(): Bool =
-        let _m = solve #{
-            LocalVar((); Cst(39)).
+        let m = solve #{
+            LocalVar((); Constant.Cst(39)). LocalVar((); Constant.Bot).
         };
-        true // TODO
+        let ans = query m select t from LocalVar(_; t);
+        List.length(ans) == 1 and List.head(ans) == Some(Constant.Cst(39))
 
     @test
     def testFixpointLattice05(): Bool =
-        let _m = solve #{
-            LocalVar((); Cst(39)). LocalVar((); Cst(39)).
+        let m = solve #{
+            LocalVar((); Constant.Cst(39)). LocalVar((); Constant.Cst(39)).
         };
-        true // TODO
+        let ans = query m select t from LocalVar(_; t);
+        List.length(ans) == 1 and List.head(ans) == Some(Constant.Cst(39))
 
     @test
     def testFixpointLattice06(): Bool =
-        let _m = solve #{
-            LocalVar((); Cst(39)). LocalVar((); Cst(12)).
+        let m = solve #{
+            LocalVar((); Constant.Cst(39)). LocalVar((); Constant.Cst(12)).
         };
-        true // TODO
+        let ans = query m select t from LocalVar(_; t);
+        List.length(ans) == 1 and List.head(ans) == Some(Constant.Top)
 
     @test
     def testFixpointLattice07(): Bool =
-        let _m = solve #{
-            LocalVar((); Cst(39)). LocalVar((); Cst(12)).
+        let m = solve #{
+            LocalVar((); Constant.Cst(39)). LocalVar((); Constant.Cst(12)). LocalVar((); Constant.Bot).
         };
-        true // TODO
+        let ans = query m select t from LocalVar(_; t);
+        List.length(ans) == 1 and List.head(ans) == Some(Constant.Top)
 
     @test
     def testFixpointLattice08(): Bool =
-        let _m = solve #{
+        let m = solve #{
             LitStm("a", 39).
-            LocalVar(x; Cst(c)) :- LitStm(x, c).
+            LocalVar(x; Constant.Cst(c)) :- LitStm(x, c).
         };
-        true // TODO
+        let ans = query m select t from LocalVar(_; t);
+        List.length(ans) == 1 and List.head(ans) == Some(Constant.Cst(39))
 
     @test
     def testFixpointLattice09(): Bool =
-        let _m = solve #{
-            LitStm("a", 39).
-            LocalVar(x; Cst(c)) :- LitStm(x, c).
+        let m = solve #{
+            LitStm("a", 39). LitStm("a", 345).
+            LocalVar(x; Constant.Cst(c)) :- LitStm(x, c).
         };
-        true // TODO
+        let ans = query m select t from LocalVar(_; t);
+        List.length(ans) == 1 and List.head(ans) == Some(Constant.Top)
 
     @test
     def testFixpointLattice10(): Bool =
-        let _m = solve #{
+        let m = solve #{
             LitStm("a", 39).
             AddStm("r", "a", "a").
-            LocalVar(x; Cst(c)) :- LitStm(x, c).
+            LocalVar(x; Constant.Cst(c)) :- LitStm(x, c).
             LocalVar(r; sum(v1, v2)) :- AddStm(r, x, y), LocalVar(x; v1), LocalVar(y; v2).
 
         };
-        true // TODO
+        let ans = query m select t from LocalVar("r"; t);
+        List.length(ans) == 1 and List.head(ans) == Some(Constant.Cst(39+39))
 
     @test
     def testFixpointLattice11(): Bool =
-        let _m = solve #{
+        let m = solve #{
             LitStm("a", 39).
+            LitStm("b", 12).
             AddStm("r", "a", "b").
-            LocalVar(x; Cst(c)) :- LitStm(x, c).
+            LocalVar(x; Constant.Cst(c)) :- LitStm(x, c).
             LocalVar(r; sum(v1, v2)) :- AddStm(r, x, y), LocalVar(x; v1), LocalVar(y; v2).
-
         };
-        true // TODO
+        let ans = query m select t from LocalVar("r"; t);
+        List.length(ans) == 1 and List.head(ans) == Some(Constant.Cst(39+12))
 
 }

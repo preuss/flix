@@ -15,29 +15,24 @@
  */
 
 namespace Fixpoint/Ram {
-    pub enum RowVar {
+
+    @Internal
+    pub enum RowVar with Eq {
         case Named(String)
         case Index(Int32)
     }
 
     instance ToString[RowVar] {
         pub def toString(var: RowVar): String = match var {
-            case Named(name) => name
-            case Index(i) => "${i}$"
-        }
-    }
-
-    instance Eq[RowVar] {
-        pub def eq(x: RowVar, y: RowVar): Bool = match x <=> y {
-            case EqualTo => true
-            case _ => false
+            case RowVar.Named(name) => name
+            case RowVar.Index(i) => "${i}$"
         }
     }
 
     instance Order[RowVar] {
         pub def compare(a: RowVar, b: RowVar): Comparison = match (a, b) {
-            case (Named(s1), Named(s2)) => s1 <=> s2
-            case (Index(i1), Index(i2)) => i1 <=> i2
+            case (RowVar.Named(s1), RowVar.Named(s2)) => s1 <=> s2
+            case (RowVar.Index(i1), RowVar.Index(i2)) => i1 <=> i2
             case _ => ?bug
         }
     }

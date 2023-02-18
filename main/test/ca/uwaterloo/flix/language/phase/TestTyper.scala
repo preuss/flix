@@ -23,14 +23,12 @@ import org.scalatest.FunSuite
 
 class TestTyper extends FunSuite with TestUtils {
 
-  val DefaultOptions: Options = Options.DefaultTest.copy(core = true)
-
   test("TestLeq01") {
     val input =
       """
         |def foo(): a = 21
       """.stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[TypeError.GeneralizationError](result)
   }
 
@@ -44,35 +42,35 @@ class TestTyper extends FunSuite with TestUtils {
         |    case Cons(t, List[t])
         |}
       """.stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[TypeError.GeneralizationError](result)
   }
 
   test("TestLeq03") {
     val input =
       """
-        |def foo(): Result[a, Int] = Ok(21)
+        |def foo(): Result[a, Int32] = Ok(21)
         |
         |enum Result[t, e] {
         |    case Ok(t),
         |    case Err(e)
         |}
       """.stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[TypeError.GeneralizationError](result)
   }
 
   test("TestLeq04") {
     val input =
       """
-        |def foo(): Result[Int, a] = Err(21)
+        |def foo(): Result[Int32, a] = Err(21)
         |
         |enum Result[t, e] {
         |    case Ok(t),
         |    case Err(e)
         |}
       """.stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[TypeError.GeneralizationError](result)
   }
 
@@ -81,7 +79,7 @@ class TestTyper extends FunSuite with TestUtils {
       """
         |def foo(): a -> a = x -> 21
       """.stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[TypeError.GeneralizationError](result)
   }
 
@@ -90,95 +88,131 @@ class TestTyper extends FunSuite with TestUtils {
       """
         |def foo(): a -> a = (x: Int32) -> x
       """.stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[TypeError.GeneralizationError](result)
   }
 
   test("TestLeq07") {
     val input =
       """
-        |def foo(): {x: Int | r} = {x = 21}
+        |def foo(): {x = Int32 | r} = {x = 21}
       """.stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[TypeError.GeneralizationError](result)
   }
 
   test("TestLeq08") {
     val input =
       """
-        |def foo(): {x: Int, y: Int | r} = {y = 42, x = 21}
+        |def foo(): {x = Int32, y = Int32 | r} = {y = 42, x = 21}
       """.stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[TypeError.GeneralizationError](result)
   }
 
   test("TestOccurs01") {
     val input =
       """
-        |rel A(v: Int)
-        |rel B(v: Int)
+        |rel A(v: Int32)
+        |rel B(v: Int32)
         |
         |def foo(a: #{A | r}, b: #{B | r}): #{A, B} = solve (a <+> b)
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[TypeError.OccursCheckError](result)
   }
 
-  test("TestMismatchedKinds.01") {
+  test("TestMismatchedTypes.01") {
     val input = "def foo(): {| x} = {a = 2} <+> {a = 2}"
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedKinds](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedTypes](result)
   }
 
-  test("TestMismatchedKinds.02") {
+  test("TestMismatchedTypes.02") {
     val input = "def foo(): #{| x} = {a = 2} <+> {a = 2}"
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedKinds](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedTypes](result)
   }
 
-  test("TestMismatchedKinds.03") {
-    val input = "def foo(): {a: Int} = {a = 2} <+> {a = 2}"
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedKinds](result)
+  test("TestMismatchedTypes.03") {
+    val input = "def foo(): {a = Int32} = {a = 2} <+> {a = 2}"
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedTypes](result)
   }
 
-  test("TestMismatchedKinds.04") {
+  test("TestMismatchedTypes.04") {
     val input = "def foo(): String = solve \"hello\""
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedKinds](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedTypes](result)
+  }
+
+  test("TestOverApplied.01") {
+    val input =
+      """
+        |def f(s: String): String = s
+        |def over(): String = f("hello", 123)
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.OverApplied](result)
+  }
+
+  test("TestOverApplied.02") {
+    val input =
+      """
+        |def f(s: String): String = s
+        |def over(): String = f("hello", 123, true)
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.OverApplied](result)
+  }
+
+  test("TestUnderApplied.01") {
+    val input =
+      """
+        |def f(x: String, y: Int32): Bool = true
+        |def under(): String = f("hello"): String
+        |
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.UnderApplied](result)
+  }
+
+  test("TestUnderApplied.02") {
+    val input =
+      """
+        |def f(x: String, y: Int32, z: Bool): Bool = true
+        |def under(): String = f("hello"): String
+        |
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.UnderApplied](result)
   }
 
   test("TestLeq.Wildcard.01") {
     val input = "def foo(a: _): _ = a"
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
     expectError[TypeError.GeneralizationError](result)
   }
 
   test("TestLeq.Wildcard.02") {
-    val input = "def foo(a: Int): _ = a"
-    val result = compile(input, DefaultOptions)
+    val input = "def foo(a: Int32): _ = a"
+    val result = compile(input, Options.TestWithLibNix)
     expectError[TypeError.GeneralizationError](result)
   }
 
   test("TestLeq.Wildcard.03") {
-    val input = "def foo(a: Int): Int & _ = a"
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.GeneralizationError](result)
-  }
-
-  test("TestLeq.Wildcard.04") {
-    val input = "def foo(a: Int): Int & _ = a"
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.GeneralizationError](result)
+    val input = "def foo(a: Int32): Int32 & _ = a"
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.EffectGeneralizationError](result)
   }
 
   test("TestLeq.Wildcard.05") {
-    val input = "def foo(g: Int -> Int & _): Int & _ = g(1)"
-    val result = compile(input, DefaultOptions)
+    val input = "def foo(g: Int32 -> Int32 & _): Int32 & _ = g(1)"
+    val result = compile(input, Options.TestWithLibNix)
     expectError[TypeError.GeneralizationError](result)
   }
 
-  test("TestLeq.Class.01") {
+  test("NoMatchingInstance.01") {
     val input =
       """
         |class C[a] {
@@ -186,23 +220,23 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |def foo(x: a): String = C.foo(x)
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.NoMatchingInstance](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MissingInstance](result)
   }
 
-  test("TestLeq.Class.02") {
+  test("NoMatchingInstance.02") {
     val input =
       """
         |class C[a] {
         |  pub def foo(x: a): String
         |}
-        |def foo(x: Int): String = C.foo(x)
+        |def foo(x: Int32): String = C.foo(x)
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.NoMatchingInstance](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MissingInstance](result)
   }
 
-  test("TestLeq.Class.03") {
+  test("NoMatchingInstance.03") {
     val input =
       """
         |enum Box[a] {
@@ -213,23 +247,23 @@ class TestTyper extends FunSuite with TestUtils {
         |    pub def foo(x: a): String
         |}
         |
-        |instance C[Int] {
-        |    pub def foo(x: Int): String = "123"
+        |instance C[Int32] {
+        |    pub def foo(x: Int32): String = "123"
         |}
         |
         |instance C[Box[a]] with C[a] {
         |    pub def foo(x: Box[a]): String = match x {
-        |        case Box(y) => C.foo(y)
+        |        case Box.Box(y) => C.foo(y)
         |    }
         |}
         |
-        |def doF(x: Box[Float]): String = C.foo(x)
+        |def doF(x: Box[Float64]): String = C.foo(x)
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.NoMatchingInstance](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MissingInstance](result)
   }
 
-  test("TestLeq.Class.04") {
+  test("NoMatchingInstance.04") {
     val input =
       """
         |enum Box[a] {
@@ -240,50 +274,71 @@ class TestTyper extends FunSuite with TestUtils {
         |    pub def foo(x: a): String
         |}
         |
-        |instance C[Int] {
-        |    pub def foo(x: Int): String = "123"
+        |instance C[Int32] {
+        |    pub def foo(x: Int32): String = "123"
         |}
         |
         |instance C[Box[a]] with C[a] {
         |    pub def foo(x: Box[a]): String = match x {
-        |        case Box(y) => C.foo(y)
+        |        case Box.Box(y) => C.foo(y)
         |    }
         |}
         |
-        |def doF(x: Box[Int]): String = C.foo(C.foo(x))
+        |def doF(x: Box[Int32]): String = C.foo(C.foo(x))
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.NoMatchingInstance](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MissingInstance](result)
   }
 
-  test("TestLeq.Class.05") {
+  test("NoMatchingInstance.05") {
     val input =
       """
         |class C[a] {
-        |    pub def foo(x: a): Int
+        |    pub def foo(x: a): Int32
         |}
         |
-        |instance C[Int] {
-        |    pub def foo(x: Int): Int = x
+        |instance C[Int32] {
+        |    pub def foo(x: Int32): Int32 = x
         |}
         |
-        |def bar(x: a, y: Int): Int = C.foo(x) + C.foo(y)
+        |def bar(x: a, y: Int32): (Int32, Int32) = (C.foo(x), C.foo(y))
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.NoMatchingInstance](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MissingInstance](result)
   }
 
-  test("TestLeq.Class.06") {
+  test("NoMatchingInstance.06") {
     val input =
       """
         |class C[a] {
-        |    pub def foo(x: a): Int
+        |    pub def foo(x: a): Int32
         |}
         |
-        |def bar(x: a, y: b): Int with C[a] = C.foo(x) + C.foo(y)
+        |def bar(x: a, y: b): (Int32, Int32) with C[a] = (C.foo(x), C.foo(y))
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.NoMatchingInstance](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MissingInstance](result)
+  }
+
+  test("NoMatchingInstance.07") {
+    val input =
+      """
+        |class C[a] {
+        |    pub def foo(x: a): Int32
+        |}
+        |
+        |enum E[_: Bool] {
+        |    case E(Int32)
+        |}
+        |
+        |instance C[E[true]] {
+        |    pub def foo(x: E[true]): Int32 = 1
+        |}
+        |
+        |def bar(): Int32 = C.foo(E.E(123))    // E(123) has type E[_], not E[true]
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MissingInstance](result)
   }
 
   test("NoMatchingInstance.Relation.01") {
@@ -297,21 +352,98 @@ class TestTyper extends FunSuite with TestUtils {
         |
         |pub def f(): Bool = {
         |   let _x = #{
-        |     R(E1).
+        |     R(E.E1).
         |   };
         |   true
         |}
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.NoMatchingInstance](result)
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MissingInstance](result)
+  }
+
+  test("MissingEq.01") {
+    val input =
+      """
+        |pub enum E {
+        |   case E
+        |}
+        |
+        |def foo(x: E, y: E): Bool = x == y
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MissingEq](result)
+  }
+
+  test("MissingSendable.01") {
+    val input =
+      """
+        |enum NotSendable(Int32)
+        |enum TrySendable[a](a) with Sendable
+        |
+        |def requiresSendable(x: a): a with Sendable[a] = x
+        |
+        |def foo(): TrySendable[NotSendable] = requiresSendable(TrySendable.TrySendable(NotSendable.NotSendable(42)))
+      """.stripMargin
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MissingSendable](result)
+  }
+
+  test("MissingSendable.02") {
+    val input =
+      """
+        |enum NotSendable(Int32)
+        |enum TrySendable[a, b](a, b) with Sendable
+        |
+        |def requiresSendable(x: a): a with Sendable[a] = x
+        |
+        |def foo(): TrySendable[NotSendable, NotSendable] = requiresSendable(TrySendable.TrySendable(NotSendable.NotSendable(42), NotSendable.NotSendable(43)))
+      """.stripMargin
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MissingSendable](result)
+  }
+
+  test("MissingOrder.01") {
+    val input =
+      """
+        |pub enum E {
+        |   case E
+        |}
+        |
+        |def foo(x: E, y: E): Bool = x <= y
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MissingOrder](result)
+  }
+
+  test("MissingToString.01") {
+    val input =
+      s"""
+         |pub enum E {
+         |   case E
+         |}
+         |
+         |def foo(x: E): String = ToString.toString(x)
+         |""".stripMargin
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MissingToString](result)
+  }
+
+  test("MissingArrowInstance.01") {
+    val input =
+      """
+        |def main(): Unit \ IO =
+        |    println(x -> x + 41i32)
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MissingArrowInstance](result)
   }
 
   test("TestChoose.Arity1.01") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = x -> {
-        |        choose x {
+        |        relational_choose x {
         |            case Absent => 1
         |        }
         |    };
@@ -323,16 +455,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.Arity1.02") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = x -> {
-        |        choose x {
+        |        relational_choose x {
         |            case Present(_) => 1
         |        }
         |    };
@@ -344,16 +476,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.Arity1.03") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = x -> {
-        |        choose x {
+        |        relational_choose x {
         |            case Absent => 1
         |        }
         |    };
@@ -365,16 +497,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.Arity1.04") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = x -> {
-        |        choose x {
+        |        relational_choose x {
         |            case Present(_) => 1
         |        }
         |    };
@@ -386,16 +518,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.AbsentAbsent.01") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Absent) => 1
         |        }
         |    };
@@ -407,16 +539,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.AbsentAbsent.02") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Absent) => 1
         |        }
         |    };
@@ -428,16 +560,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.AbsentAbsent.03") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Absent) => 1
         |        }
         |    };
@@ -449,16 +581,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.AbsentAbsent.IfThenElse.01") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Absent) => 1
         |        }
         |    };
@@ -470,16 +602,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.AbsentAbsent.IfThenElse.02") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Absent) => 1
         |        }
         |    };
@@ -491,16 +623,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.AbsentPresent.01") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Present(_)) => 1
         |        }
         |    };
@@ -512,16 +644,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.AbsentPresent.02") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Present(_)) => 1
         |        }
         |    };
@@ -533,16 +665,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.AbsentPresent.03") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Present(_)) => 1
         |        }
         |    };
@@ -554,16 +686,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.AbsentPresent.IfThenElse.01") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Present(_)) => 1
         |        }
         |    };
@@ -575,16 +707,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.AbsentPresent.IfThenElse.02") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Present(_)) => 1
         |        }
         |    };
@@ -596,16 +728,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.TwoCases.01") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Absent)         => 1
         |            case (Present(_), Present(_)) => 2
         |        }
@@ -618,16 +750,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.TwoCases.02") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Absent)         => 1
         |            case (Present(_), Present(_)) => 2
         |        }
@@ -640,16 +772,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.TwoCases.03") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Present(_)) => 1
         |            case (Present(_), Absent) => 2
         |        }
@@ -662,16 +794,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.TwoCases.04") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Present(_)) => 1
         |            case (Present(_), Absent) => 2
         |        }
@@ -684,16 +816,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.ThreeCases.01") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Present(_))       => 1
         |            case (Present(_), Absent)       => 2
         |            case (Present(_), Present(_))   => 3
@@ -707,16 +839,16 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.ThreeCases.02") {
     val input =
       """
-        |def foo(): Int =
+        |def foo(): Int32 =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Absent)           => 1
         |            case (Absent, Present(_))       => 2
         |            case (Present(_), Absent)       => 3
@@ -730,8 +862,8 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.If.01") {
@@ -739,7 +871,7 @@ class TestTyper extends FunSuite with TestUtils {
       """
         |def foo(): Bool =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Absent)    => 1
         |            case (Present(_), Absent)    => 2
         |        }
@@ -752,8 +884,8 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.If.02") {
@@ -761,7 +893,7 @@ class TestTyper extends FunSuite with TestUtils {
       """
         |def foo(): Bool =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Absent)    => 1
         |            case (Present(_), Absent)    => 2
         |        }
@@ -774,8 +906,8 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.If.03") {
@@ -783,7 +915,7 @@ class TestTyper extends FunSuite with TestUtils {
       """
         |def foo(): Bool =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (Absent, Absent)    => 1
         |            case (Present(_), Absent)    => 2
         |        }
@@ -796,8 +928,8 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.If.04") {
@@ -805,7 +937,7 @@ class TestTyper extends FunSuite with TestUtils {
       """
         |def foo(): Bool =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (_, Absent)    => 1
         |            case (_, Absent)    => 2
         |        }
@@ -818,8 +950,8 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.If.05") {
@@ -827,7 +959,7 @@ class TestTyper extends FunSuite with TestUtils {
       """
         |def foo(): Bool =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (_, Absent)    => 1
         |            case (_, Absent)    => 2
         |        }
@@ -840,8 +972,8 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("TestChoose.If.06") {
@@ -849,7 +981,7 @@ class TestTyper extends FunSuite with TestUtils {
       """
         |def foo(): Bool =
         |    let f = (x, y) -> {
-        |        choose (x, y) {
+        |        relational_choose (x, y) {
         |            case (_, Absent)    => 1
         |            case (_, Absent)    => 2
         |        }
@@ -862,15 +994,15 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
-  test("TestLeq.Choice.01") {
+  test("Test.Choice.Param.01") {
     val input =
       """
         |pub def foo(x: Choice[String, true, _]): Int32 =
-        |    choose x {
+        |    relational_choose x {
         |        case Absent => 1
         |    }
         |
@@ -880,15 +1012,15 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
       """.stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.GeneralizationError](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedBools](result)
   }
 
-  test("TestLeq.Choice.02") {
+  test("Test.Choice.Param.02") {
     val input =
       """
         |pub def foo(x: Choice[String, _, true]): Int32 =
-        |    choose x {
+        |    relational_choose x {
         |        case Present(_) => 1
         |    }
         |
@@ -898,8 +1030,8 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
       """.stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.GeneralizationError](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedBools](result)
   }
 
   test("Test.Choice.Empty.01") {
@@ -907,11 +1039,11 @@ class TestTyper extends FunSuite with TestUtils {
       """
         |def foo(): Unit =
         |    let f = x -> {
-        |        choose x {
-        |            case Absent     => 1 as & Impure
+        |        relational_choose x {
+        |            case Absent     => unsafe_cast 1 as _ \ IO
         |        };
-        |        choose x {
-        |            case Present(_) => 2 as & Impure
+        |        relational_choose x {
+        |            case Present(_) => unsafe_cast 2 as _ \ IO
         |        }
         |    };
         |    f(Absent)
@@ -922,8 +1054,8 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
       """.stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("Test.Choice.Empty.02") {
@@ -931,11 +1063,11 @@ class TestTyper extends FunSuite with TestUtils {
       """
         |def foo(): Unit =
         |    let f = x -> {
-        |        choose x {
-        |            case Absent     => 1 as & Impure
+        |        relational_choose x {
+        |            case Absent     => unsafe_cast 1 as _ \ IO
         |        };
-        |        choose x {
-        |            case Present(_) => 2 as & Impure
+        |        relational_choose x {
+        |            case Present(_) => unsafe_cast 2 as _ \ IO
         |        }
         |    };
         |    f(Present(123))
@@ -946,17 +1078,8 @@ class TestTyper extends FunSuite with TestUtils {
         |}
         |
       """.stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
-  }
-
-  test("Test.MismatchedTypes.Law.01") {
-    val input =
-      """
-        |law f: forall (x: Int, y: Bool) . x + y == 3
-        |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedTypes](result)
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("Test.ChooseStar.01") {
@@ -969,19 +1092,19 @@ class TestTyper extends FunSuite with TestUtils {
         |
         |pub def f(): Bool =
         |    let f = x -> {
-        |        choose* x {
+        |        relational_choose* x {
         |            case Absent     => Absent
         |            case Present(v) => Present(v)
         |        }
         |    };
-        |    let isAbsent = x -> choose x {
+        |    let isAbsent = x -> relational_choose x {
         |        case Absent => true
         |    };
         |    isAbsent(f(Present(123)))
         |
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("Test.ChooseStar.02") {
@@ -994,18 +1117,18 @@ class TestTyper extends FunSuite with TestUtils {
         |
         |pub def f(): Bool =
         |    let f = x -> {
-        |        choose* x {
+        |        relational_choose* x {
         |            case Absent     => Present(123)
         |            case Present(_) => Absent
         |        }
         |    };
-        |    let isAbsent = x -> choose x {
+        |    let isAbsent = x -> relational_choose x {
         |        case Absent => true
         |    };
         |    isAbsent(f(Absent))
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.MismatchedBools](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
   test("Test.ChooseStar.03") {
@@ -1018,82 +1141,779 @@ class TestTyper extends FunSuite with TestUtils {
         |
         |pub def f(): Bool =
         |    let f = (x, y) -> {
-        |        choose* (x, y) {
+        |        relational_choose* (x, y) {
         |            case (Absent, Absent)         => Absent
         |            case (Present(_), Present(_)) => Present(42)
         |        }
         |    };
-        |    let isAbsent = x -> choose x {
+        |    let isAbsent = x -> relational_choose x {
         |        case Absent => true
         |    };
         |    isAbsent(f(Present(123), Present(456)))
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
+  }
+
+  test("Test.ImpureDeclaredAsPure.01") {
+    val input =
+      """
+        |pub def f(): Int32 = unsafe_cast 123 as _ \ IO
+        |
+      """.stripMargin
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.ImpureDeclaredAsPure](result)
+  }
+
+  test("Test.ImpureDeclaredAsPure.02") {
+    val input =
+      """
+        |def f(): Int32 & Pure = unsafe_cast 123 as _ \ IO
+        |
+      """.stripMargin
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.ImpureDeclaredAsPure](result)
+  }
+
+  test("Test.ImpureDeclaredAsPure.03") {
+    // Regression test. See https://github.com/flix/flix/issues/4062
+    val input =
+      """
+        |def mkArray(): Array[Int32, Static] \ IO = Array#{} @ Static
+        |
+        |def zero(): Int32 & Pure = $ARRAY_LENGTH$(mkArray())
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.ImpureDeclaredAsPure](result)
+  }
+
+  test("Test.EffectPolymorphicDeclaredAsPure.01") {
+    val input =
+      """
+        |def f(g: Int32 -> Int32 \ ef): Int32 = g(123)
+        |
+      """.stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.EffectPolymorphicDeclaredAsPure](result)
+  }
+
+  test("Test.EffectPolymorphicDeclaredAsPure.02") {
+    val input =
+      """
+        |def f(g: Int32 -> Int32 \ ef): Int32 & Pure = g(123)
+        |
+      """.stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.EffectPolymorphicDeclaredAsPure](result)
+  }
+
+  test("Test.EffectGeneralizationError.01") {
+    val input =
+      """
+        |def f(g: Int32 -> Int32 \ ef): Int32 \ ef = 123
+        |
+      """.stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.EffectGeneralizationError](result)
+  }
+
+  test("Test.EffectGeneralizationError.02") {
+    val input =
+      """
+        |def f(g: Int32 -> Int32 \ ef1, h: Int32 -> Int32 \ ef2): Int32 & (ef1 and ef2) = 123
+        |
+      """.stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.EffectGeneralizationError](result)
+  }
+
+  test("Test.RegionVarEscapes.01") {
+    val input =
+      """
+        |pub def f(): Int32 =
+        |    let _ = {
+        |        region r {
+        |            let x = ref 123 @ r;
+        |            x
+        |        }
+        |    };
+        |    42
+        |
+      """.stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.RegionVarEscapes](result)
+  }
+
+  test("Test.RegionVarEscapes.02") {
+    val input =
+      """
+        |pub def f(): Int32 =
+        |    let _ = {
+        |        region r {
+        |            let x = ref 123 @ r;
+        |            (123, x)
+        |        }
+        |    };
+        |    42
+        |
+      """.stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.RegionVarEscapes](result)
+  }
+
+  test("Test.RegionVarEscapes.03") {
+    val input =
+      """
+        |pub def f(): Int32 =
+        |    let _ = {
+        |        region r {
+        |            let x = ref 123 @ r;
+        |            _w -> x
+        |        }
+        |    };
+        |    42
+        |
+      """.stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.RegionVarEscapes](result)
+  }
+
+  test("Test.RegionVarEscapes.04") {
+    val input =
+      """
+        |pub def f(): Int32 =
+        |    let _ = {
+        |        region r {
+        |            let x = ref 123 @ r;
+        |            w -> {
+        |                discard deref x;
+        |                w
+        |            }
+        |        }
+        |    };
+        |    42
+        |
+      """.stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.RegionVarEscapes](result)
+  }
+
+  //  test("Test.RegionVarEscapes.05") {
+  //    val input =
+  //      """
+  //        |pub def g(): Int32 =
+  //        |    let region r1;
+  //        |    let cell = ref None @ r1;
+  //        |    let _ = {
+  //        |        let region r2;
+  //        |        let x = ref 123 @ r2;
+  //        |        cell := Some(_ -> {deref x});
+  //        |        ()
+  //        |    };
+  //        |    42
+  //        |
+  //      """.stripMargin
+  //    val result = compile(input, Options.TestWithLibNix)
+  //    expectError[TypeError.RegionVarEscapes](result)
+  //    }
+  //  }
+
+  test("Test.InvalidOpParamCount.Do.01") {
+    val input =
+      """
+        |eff E {
+        |    pub def op(x: String): Unit
+        |}
+        |
+        |def foo(): Unit \ E = do E.op("hello", "world")
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.InvalidOpParamCount](result)
+  }
+
+  test("Test.InvalidOpParamCount.Handler.01") {
+    val input =
+      """
+        |eff E {
+        |    pub def op(x: String): Unit
+        |}
+        |
+        |def foo(): Unit = {
+        |    try () with E {
+        |        def op(x, y) = ()
+        |    }
+        |}
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.InvalidOpParamCount](result)
+  }
+
+  test("Test.UnexpectedType.OpParam.01") {
+    val input =
+      """
+        |eff E {
+        |    pub def op(x: String): Unit
+        |}
+        |
+        |def foo(): Unit \ E = do E.op(123)
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.UnexpectedType](result)
+  }
+
+  test("Test.MismatchedEff.Without.01") {
+    val input =
+      """
+        |eff E {
+        |    pub def op(): Unit
+        |}
+        |
+        |def foo(): Unit = do E.op() without E
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
     expectError[TypeError.MismatchedBools](result)
   }
 
-  test("Test.IllegalMain.01") {
+  test("Test.MismatchedEff.Apply.02") {
     val input =
       """
-        |def main(blah: Array[String]): Int32 = ???
-        |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.IllegalMain](result)
-  }
-
-  test("Test.IllegalMain.02") {
-    val input =
-      """
-        |def main(blah: Array[Char]): Int32 & Impure = ???
-        |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.IllegalMain](result)
-  }
-
-  test("Test.IllegalMain.03") {
-    val input =
-      """
-        |def main(blah: Array[String]): Int64 & Impure = ???
-        |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.IllegalMain](result)
-  }
-
-  test("Test.IllegalMain.04") {
-    val input =
-      """
-        |def main(blah: Array[a]): Int32 & Impure = ???
-        |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.IllegalMain](result)
-  }
-
-  test("Test.IllegalMain.05") {
-    val input =
-      """
-        |class C[a]
+        |eff E {
+        |    pub def op(): Unit
+        |}
         |
-        |def main(blah: Array[a]): Int32 & Impure with C[a] = ???
+        |def disjoint(f: Unit -> Unit \ ef1, g: Unit -> Unit \ ef2 - ef1): Unit = ???
+        |
+        |def foo(): Unit = disjoint(_ -> do E.op(), _ -> do E.op())
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.IllegalMain](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedArrowBools](result)
   }
 
-  test("Test.IllegalMain.06") {
+  test("Test.GeneralizationError.Eff.01") {
     val input =
       """
-        |def main(blah: Array[String]): a & Impure = ???
+        |eff E {
+        |    pub def op(): Unit
+        |}
+        |
+        |eff F {
+        |    pub def op(): Unit
+        |}
+        |
+        |def doBoth(f: Unit -> Unit \ {ef - E}, g: Unit -> Unit \ {ef - F}): Unit \ {ef - E - F} = g(); f()
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.IllegalMain](result)
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.GeneralizationError](result)
   }
 
-  test("Test.IllegalMain.07") {
+  test("TestUpcast.01") {
     val input =
       """
-        |def main(blah: Array[String]): Int & ef = ???
+        |def f(): Unit & ef =
+        |    let f =
+        |        if (true)
+        |            upcast x -> (unsafe_cast x + 1 as _ & ef)
+        |        else
+        |            x -> x + 1;
+        |    let _ = f(1);
+        |    ()
         |""".stripMargin
-    val result = compile(input, DefaultOptions)
-    expectError[TypeError.IllegalMain](result)
+
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.EffectGeneralizationError](result)
+  }
+
+  test("TestUpcast.02") {
+    val input =
+      """
+        |def f(): Unit & ef =
+        |    import new java.lang.StringBuilder(): ##java.lang.StringBuilder & Impure as newStringBuilder;
+        |    import new java.lang.Object(): ##java.lang.Object & Impure as newObject;
+        |    let _ =
+        |        if (true)
+        |            newStringBuilder()
+        |        else
+        |            upcast newObject();
+        |    ()
+        |""".stripMargin
+
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.EffectGeneralizationError](result)
+  }
+
+  test("TestUpcast.03") {
+    val input =
+      """
+        |def f(): Unit & ef =
+        |    import new java.lang.StringBuilder(): ##java.lang.StringBuilder & Impure as newStringBuilder;
+        |    import new java.lang.Object(): ##java.lang.Object & Impure as newObject;
+        |    let f = (_: ##java.lang.StringBuilder) -> newObject(); // sb  -> obj
+        |    let g = (_: ##java.lang.Object) -> newStringBuilder(); // obj -> sb
+        |    let _ =
+        |        if (true)
+        |            f
+        |        else
+        |            upcast g;
+        |    ()
+        |""".stripMargin
+
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.EffectGeneralizationError](result)
+  }
+
+  test("TestUpcast.04") {
+    val input =
+      """
+        |def f(): Unit & ef =
+        |    import new java.lang.StringBuilder(): ##java.lang.StringBuilder & Impure as newStringBuilder;
+        |    import new java.lang.Object(): ##java.lang.Object & Impure as newObject;
+        |    let f = (_: ##java.lang.StringBuilder) -> newObject(); // sb  -> obj
+        |    let g = (_: ##java.lang.Object) -> newStringBuilder(); // obj -> sb
+        |    let _ =
+        |        if (true)
+        |            f
+        |        else
+        |            upcast g;
+        |    ()
+        |""".stripMargin
+
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.EffectGeneralizationError](result)
+  }
+
+  test("TestPossibleUpcast.01") {
+    val input =
+      """
+        |def f(): ##dev.flix.test.TestClassWithDefaultConstructor \ IO =
+        |    import new dev.flix.test.TestClassWithInheritedMethod(): ##dev.flix.test.TestClassWithInheritedMethod as newObj;
+        |    let x: ##dev.flix.test.TestClassWithDefaultConstructor = newObj();
+        |    x
+      """.stripMargin
+
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.PossibleUpcast](result)
+  }
+
+  test("TestPar.01") {
+    val input =
+      """
+        |def f(): Int32 & Impure =
+        |    par f()
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedBools](result)
+  }
+
+  test("TestPar.02") {
+    val input =
+      """
+        |def f(g: Unit -> a & ef): a & ef =
+        |    par g()
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedBools](result)
+  }
+
+  test("TestPar.03") {
+    val input =
+      """
+        |eff E {
+        |    pub def op(): Unit
+        |}
+        |
+        |def f(): a \ E =
+        |    par f()
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedBools](result)
+  }
+
+  test("TestPar.04") {
+    val input =
+      """
+        |def f(g: Unit -> b \ ef): b \ ef =
+        |    par g()
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedBools](result)
+  }
+
+  test("TestParYield.01") {
+    val input =
+      """
+        | def f(g: Unit -> Unit \ Impure): Unit \ Impure =
+        |     let _ = par (x <- { unsafe_cast 1 as _ & Impure }) yield x;
+        |     g()
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedBools](result)
+  }
+
+  test("TestParYield.02") {
+    val input =
+      """
+        | def f(g: Unit -> Unit \ Impure): Unit \ Impure =
+        |     let _ = par (x <- { unsafe_cast 1 as _ \ Impure }) yield x;
+        |     g()
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedBools](result)
+  }
+
+  test("TestParYield.03") {
+    val input =
+      """
+        | def f(g: Unit -> Unit \ Impure): Unit \ Impure =
+        |     let _ = par (a <- 1; b <- { unsafe_cast 1 as _ \ Impure }) yield (a, b);
+        |     g()
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.MismatchedBools](result)
+  }
+
+  test("TestParYield.04") {
+    val input =
+      """
+        | def f(): Int32 =
+        |     par (a <- true) yield a + 1
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibMin)
+    expectError[TypeError.MismatchedTypes](result)
+  }
+
+  test("Test.UnexpectedArgument.01") {
+    val input =
+      """
+        |def f[m: Bool -> Type, a: Bool](_: m[a]): m[a] = ???
+        |
+        |enum Box[a](a)
+        |
+        |def g(): Box[Int32] = f(Box.Box(123))
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.UnexpectedArgument](result)
+  }
+
+  test("Test.UnexpectedArgument.02") {
+    val input =
+      """
+        |eff E {
+        |    pub def op(): Unit
+        |}
+        |
+        |def noE(f: Unit -> Unit \ {ef - E}): Unit = ???
+        |
+        |def foo(): Unit = noE(_ -> do E.op())
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.UnexpectedArgument](result)
+  }
+
+  test("Test.UnexpectedArgument.03") {
+    val input =
+      """
+        |eff E {
+        |    pub def op(): Unit
+        |}
+        |
+        |def mustE(f: Unit -> Unit \ {ef, E}): Unit = ???
+        |
+        |def foo(): Unit = mustE(x -> x)
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.UnexpectedArgument](result)
+  }
+
+  test("Test.UnexpectedArgument.04") {
+    val input =
+      """
+        |def f(x: Bool, y: Bool): Bool = ???
+        |
+        |law l: forall (x: Int32, y: Bool) . f(x, y)
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.UnexpectedArgument](result)
+  }
+
+  test("Test.UnexpectedArgument.05") {
+    // Regression test.
+    // See https://github.com/flix/flix/issues/3634
+    val input =
+    """
+      |enum E[a: Type, ef: Bool](Unit)
+      |def f(g: E[Int32, true]): Bool = ???
+      |def mkE(): E[Int32, true] \ ef = ???
+      |
+      |def g(): Bool = f(mkE)
+      |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.UnexpectedArgument](result)
+  }
+
+  test("Test.UnexpectedArgument.06") {
+    val input =
+      """
+        |def takesString(_: String): Unit = ()
+        |
+        |def f(): Unit = typematch 123 {
+        |    case x: _ => takesString(x)
+        |    case _: _ => ???
+        |}
+        |""".stripMargin
+    val result = compile(input, Options.TestWithLibNix)
+    expectError[TypeError.UnexpectedArgument](result)
+  }
+
+  test("TestChoose.01") {
+    val input =
+      """
+        |restrictable enum Expr[s] {
+        |    case Cst, Var, Not, And, Or, Xor
+        |}
+        |
+        |pub def foo(): Bool = choose Expr.Cst {
+        |    case Expr.Var(_) => true
+        |}
+        |""".stripMargin
+    expectError[TypeError.MismatchedBools](compile(input, Options.TestWithLibNix))
+  }
+
+  test("TestChoose.02") {
+    val input =
+      """
+        |restrictable enum Expr[s] {
+        |    case Cst, Var, Not, And, Or, Xor
+        |}
+        |
+        | pub def testChoose06(): Bool = {
+        |     let f = x -> choose x {
+        |         case Expr.Cst(_) => false
+        |         case Expr.Var(_) => true
+        |     };
+        |     let g = x -> choose x {
+        |         case Expr.Cst(_) => false
+        |         case Expr.Xor(_) => true
+        |     };
+        |     let h = if (true) f else g;
+        |     h(Expr.Var)
+        | }
+        |""".stripMargin
+    expectError[TypeError.MismatchedArrowBools](compile(input, Options.TestWithLibNix))
+  }
+
+  test("TestChoose.03") {
+    val input =
+      """
+        |restrictable enum Expr[s] {
+        |    case Cst, Var, Not, And, Or, Xor
+        |}
+        |
+        | pub def testChoose06(): Bool = {
+        |     let f = x -> choose x {
+        |         case Expr.Cst(_) => false
+        |         case Expr.Var(_) => true
+        |         case Expr.Not(_) => false
+        |     };
+        |     let g = x -> choose x {
+        |         case Expr.Cst(_) => false
+        |         case Expr.Xor(_) => true
+        |         case Expr.Not(_) => false
+        |     };
+        |     let h = if (true) f else g;
+        |
+        |     let cstOrNotOrVar = if (true) open Expr.Cst else if (true) open Expr.Not else open Expr.Var;
+        |
+        |     h(cstOrNotOrVar)
+        | }
+        |""".stripMargin
+    expectError[TypeError.MismatchedArrowBools](compile(input, Options.TestWithLibNix))
+  }
+
+  test("TestChooseStar.01") {
+    val input =
+      """
+        |restrictable enum Expr[s] {
+        |    case Cst, Var, Not, And, Or, Xor
+        |}
+        |
+        |pub def foo(): Bool = {
+        |    // P2: check the lower bound by using result in a choose
+        |    let star = choose* Expr.Cst {
+        |        case Expr.Cst(_) => Expr.Var()
+        |    };
+        |    choose star {
+        |        case Expr.Cst(_) => false
+        |    }
+        |}
+        |""".stripMargin
+    expectError[TypeError.MismatchedBools](compile(input, Options.TestWithLibNix))
+  }
+
+  test("TestChooseStar.02") {
+    val input =
+      """
+        |restrictable enum Expr[s] {
+        |    case Cst, Var, Not, And, Or, Xor
+        |}
+        |
+        |pub def quack(): Bool = {
+        |    // P2: check the lower bound by using result in a choose
+        |    let star = choose* Expr.Cst {
+        |        case Expr.Cst(_) => Expr.Var()
+        |        case Expr.Not(_) => Expr.Var()
+        |        case Expr.Xor(_) => Expr.Var()
+        |    };
+        |    choose star {
+        |        case Expr.Xor(_) => false
+        |    }
+        |}
+        |""".stripMargin
+    expectError[TypeError.MismatchedBools](compile(input, Options.TestWithLibNix))
+  }
+
+  test("TestChooseStar.03") {
+    val input =
+      """
+        |restrictable enum Expr[s] {
+        |    case Cst, Var, Not, And, Or, Xor
+        |}
+        |
+        |pub def liquorice(): Bool = {
+        |    // P2: check the lower bound by using result in a choose
+        |    let star = choose* Expr.Cst {
+        |        case Expr.Cst(_) => Expr.Var()
+        |        case Expr.Not(_) => Expr.Var()
+        |        case Expr.Xor(_) => Expr.Not()
+        |    };
+        |    choose star {
+        |        case Expr.Not(_) => false
+        |    }
+        |}
+        |""".stripMargin
+    expectError[TypeError.MismatchedBools](compile(input, Options.TestWithLibNix))
+  }
+
+  test("TestChooseStar.04") {
+    val input =
+      """
+        |restrictable enum Expr[s] {
+        |    case Cst, Var, Not, And, Or, Xor
+        |}
+        |
+        |pub def testChooseStar4(): Bool = {
+        |    // P2: check the lower bound by using result in a choose
+        |    let star = choose* Expr.Cst {
+        |        case Expr.Cst(_) => Expr.Var()
+        |        case Expr.Not(_) => Expr.Var()
+        |        case Expr.Xor(_) => Expr.Not()
+        |    };
+        |    choose star {
+        |        case Expr.Var(_) => true
+        |        case Expr.Xor(_) => false
+        |    }
+        |}
+        |""".stripMargin
+    expectError[TypeError.MismatchedBools](compile(input, Options.TestWithLibNix))
+  }
+
+  test("TestChooseStar.05") {
+    val input =
+      """
+        |restrictable enum Expr[s] {
+        |    case Cst, Var, Not, And, Or, Xor
+        |}
+        |
+        |pub def foo(): Bool = {
+        |    // P2: check the lower bound by using result in a choose
+        |    let star = choose* Expr.Cst {
+        |        case Expr.Not(_) => Expr.Not()
+        |        case Expr.Cst(_) => Expr.Var()
+        |    };
+        |    choose star {
+        |        case Expr.Cst(_) => false
+        |    }
+        |}
+        |""".stripMargin
+    expectError[TypeError.MismatchedBools](compile(input, Options.TestWithLibNix))
+  }
+
+  test("TestChooseStar.06") {
+    val input =
+      """
+        |restrictable enum E[s] {
+        |    case N(E[s])
+        |    case C
+        |}
+        |
+        |def n(e: E[s && <E.N>]): _ = ???
+        |
+        |def foo(e: E[s]): E[s] = choose* e {
+        |    case E.N(x) => n(x)            // must have x <: <E.N> but this doesn't hold
+        |    case E.C    => E.C
+        |}
+        |""".stripMargin
+    expectError[TypeError.UnexpectedArgument](compile(input, Options.TestWithLibNix))
+  }
+
+  test("TestCaseSetAnnotation.01") {
+    val input =
+      """
+        |restrictable enum Color[s] {
+        |    case Red, Green, Blue
+        |}
+        |
+        |// Not all cases caught
+        |def isRed(c: Color[s]): Bool = choose c {
+        |    case Color.Red => true
+        |    case Color.Green => false
+        |}
+        |""".stripMargin
+    expectError[TypeError.MismatchedBools](compile(input, Options.TestWithLibNix))
+  }
+
+  test("TestCaseSetAnnotation.02") {
+    val input =
+      """
+        |restrictable enum Color[s] {
+        |    case Red, Green, Blue
+        |}
+        |
+        |// forgot Green intro
+        |def redToGreen(c: Color[s]): Color[s -- <Color.Red>] = choose* c {
+        |    case Color.Red => Color.Green
+        |    case Color.Green => Color.Green
+        |    case Color.Blue => Color.Blue
+        |}
+        |""".stripMargin
+    expectError[TypeError.GeneralizationError](compile(input, Options.TestWithLibNix))
+  }
+
+  test("TestCaseSetAnnotation.03") {
+    val input =
+      """
+        |restrictable enum Color[s] {
+        |    case Red, Green, Blue
+        |}
+        |
+        |// Wrong minus
+        |def isRed(c: Color[s -- <Color.Blue>]): Bool = choose* c {
+        |    case Color.Red => true
+        |    case Color.Blue => false
+        |}
+        |""".stripMargin
+    expectError[TypeError.MismatchedBools](compile(input, Options.TestWithLibNix))
+  }
+
+  test("TestCaseSetAnnotation.04") {
+    val input =
+      """
+        |restrictable enum Color[s] {
+        |    case Red, Green, Blue
+        |}
+        |
+        |// Wrong minus parsing
+        |def isRed(c: Color[s -- <Color.Red> ++ <Color.Green>]): Color[(s -- <Color.Red>) ++ <Color.Green>] = c
+        |""".stripMargin
+    expectError[TypeError.GeneralizationError](compile(input, Options.TestWithLibNix))
   }
 }

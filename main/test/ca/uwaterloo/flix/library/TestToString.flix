@@ -16,7 +16,7 @@
 
 namespace TestToString {
 
-    use ToString.toString;
+    use ToString.toString
 
     /////////////////////////////////////////////////////////////////////////////
     // Unit                                                                    //
@@ -82,6 +82,22 @@ namespace TestToString {
 
     @test
     def float64ToString04(): Bool = toString(3.14f64) == "3.14"
+
+    /////////////////////////////////////////////////////////////////////////////
+    // BigDecimal                                                              //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def bigDecimalToString01(): Bool = toString(0.0ff) == "0.0"
+
+    @test
+    def bigDecimalToString02(): Bool = toString(1.0ff) == "1.0"
+
+    @test
+    def bigDecimalToString03(): Bool = toString(-1.0ff) == "-1.0"
+
+    @test
+    def bigDecimalToString04(): Bool = toString(3.14ff) == "3.14"
 
     /////////////////////////////////////////////////////////////////////////////
     // Int8                                                                    //
@@ -356,27 +372,33 @@ namespace TestToString {
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def arrayToString01(): Bool & Impure =
-        toString(Array.range(0, 5)) == "[0, 1, 2, 3, 4]"
+    def arrayToString01(): Bool = region r {
+        toString(Array.range(r, 0, 5)) == "[0, 1, 2, 3, 4]"
+    }
 
     @test
-    def arrayToString02(): Bool & Impure =
-        toString(Array.range(0, 1)) == "[0]"
+    def arrayToString02(): Bool = region r {
+        toString(Array.range(r, 0, 1)) == "[0]"
+    }
 
     @test
-    def arrayToString03(): Bool & Impure =
-        toString(Array.new('a', 3)) == "[a, a, a]"
+    def arrayToString03(): Bool = region r {
+        toString(Array.repeat(r, 3, 'a')) == "[a, a, a]"
+    }
 
     @test
-    def arrayToString04(): Bool & Impure =
-        toString(Array.range(1, 3)) == "[1, 2]"
+    def arrayToString04(): Bool = region r {
+        toString(Array.range(r, 1, 3)) == "[1, 2]"
+    }
 
     @test
-    def arrayToString05(): Bool & Impure =
-        toString(Array.new([1, 2, 3], 3)) == "[[1, 2, 3], [1, 2, 3], [1, 2, 3]]"
+    def arrayToString05(): Bool = region r {
+        toString(Array.repeat(r, 3, Array#{1, 2, 3} @ r)) == "[[1, 2, 3], [1, 2, 3], [1, 2, 3]]"
+    }
 
     @test
-    def arrayToString06(): Bool & Impure =
-        toString(Array.range(0, 0)) == "[]"
+    def arrayToString06(): Bool = region r {
+        toString(Array.range(r, 0, 0)) == "[]"
+    }
 
 }

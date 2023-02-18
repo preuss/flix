@@ -15,648 +15,1123 @@
  */
 
 namespace TestMutList {
+    use ToString.toString
+    use MutList.MutList
+    use MutList.sameElements
 
-    use ToString.toString;
+    ///
+    /// Helper function to test capacity of internal array.
+    ///
+    def capacity(v: MutList[a, r]): Int32 \ Read(r) =
+        let MutList(_, a, _) = v;
+        Array.length(deref a)
+
+    /////////////////////////////////////////////////////////////////////////////
+    // toString                                                                //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def toString01(): Bool = region r {
+        let l: MutList[Int32, r] = new MutList(r);
+        MutList.toString(l) == "MutList#{}"
+    }
+
+    @test
+    def toString02(): Bool = region r {
+        let l: MutList[Int32, r] = new MutList(r);
+        MutList.push!(1, l);
+        MutList.toString(l) == "MutList#{1}"
+    }
+
+    @test
+    def toString03(): Bool = region r {
+        let l: MutList[Int32, r] = new MutList(r);
+        MutList.push!(1, l);
+        MutList.push!(2, l);
+        MutList.push!(3, l);
+        MutList.push!(4, l);
+        MutList.push!(5, l);
+        MutList.toString(l) == "MutList#{1, 2, 3, 4, 5}"
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // sameElements                                                            //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def sameElements01(): Bool = region r {
+        let u: MutList[Int32, _] = new MutList(r);
+        let v: MutList[Int32, _] = new MutList(r);
+        u `sameElements` v
+    }
+
+    @test
+    def sameElements02(): Bool = region r {
+        let u = new MutList(r);
+        MutList.push!(0, u);
+        let v = new MutList(r);
+        (u `sameElements` v) == false
+    }
+
+    @test
+    def sameElements03(): Bool = region r {
+        let u = new MutList(r);
+        MutList.push!(2, u);
+        MutList.push!(3, u);
+        let v = new MutList(r);
+        MutList.push!(2, v);
+        MutList.push!(3, v);
+        u `sameElements` v
+    }
+
+    @test
+    def sameElements04(): Bool = region r {
+        let u = new MutList(r);
+        MutList.push!(2, u);
+        MutList.push!(3, u);
+        let v = new MutList(r);
+        MutList.push!(2, v);
+        MutList.push!(2, v);
+        (u `sameElements` v) == false
+    }
+
+    @test
+    def sameElements05(): Bool = region r {
+        let u = new MutList(r);
+        MutList.push!(1, u);
+        let v = new MutList(r);
+        (u `sameElements` v) == false
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // Order.compare                                                           //
+    /////////////////////////////////////////////////////////////////////////////
+
+    // TODO
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // nth                                                                     //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def nth01(): Bool = region r {
+        MutList.nth(0, new MutList(r): MutList[Int32, _]) == None
+    }
+
+    @test
+    def nth02(): Bool = region r {
+        let v = new MutList(r);
+        MutList.push!(42, v);
+        MutList.nth(0, v) == Some(42)
+    }
+
+    @test
+    def nth03(): Bool = region r {
+        let v = new MutList(r);
+        MutList.push!(42, v);
+        MutList.nth(1, v) == None
+    }
+
+    @test
+    def nth04(): Bool = region r {
+        MutList.nth(1, MutList.range(r, 0, 2)) == Some(1)
+    }
+
+    @test
+    def nth05(): Bool = region r {
+        MutList.nth(3, MutList.range(r, 0, 4)) == Some(3)
+    }
+
+    @test
+    def nth06(): Bool = region r {
+        MutList.nth(30, MutList.range(r, 0, 42)) == Some(30)
+    }
+
+    @test
+    def nth07(): Bool = region r {
+        MutList.nth(-30, MutList.range(r, 0, 42)) == None
+    }
+
+    @test
+    def nth08(): Bool = region r {
+        MutList.nth(50, MutList.range(r, 0, 42)) == None
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // length                                                                  //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def length01(): Bool & Impure = MutList.length(MutList.new()) == 0
+    def length01(): Bool = region r {
+        MutList.length(new MutList(r)) == 0
+    }
 
     @test
-    def length02(): Bool & Impure =
-        let v = MutList.new();
+    def length02(): Bool = region r {
+        let v = new MutList(r);
         MutList.push!(42, v);
         MutList.length(v) == 1
+    }
 
     @test
-    def length03(): Bool & Impure = MutList.length(MutList.range(0, 2)) == 2
+    def length03(): Bool = region r {
+        MutList.length(MutList.range(r, 0, 2)) == 2
+    }
 
     @test
-    def length04(): Bool & Impure = MutList.length(MutList.range(0, 4)) == 4
+    def length04(): Bool = region r {
+        MutList.length(MutList.range(r, 0, 4)) == 4
+    }
 
     @test
-    def length05(): Bool & Impure = MutList.length(MutList.range(0, 42)) == 42
+    def length05(): Bool = region r {
+        MutList.length(MutList.range(r, 0, 42)) == 42
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // isEmpty                                                                 //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def isEmpty01(): Bool & Impure = MutList.isEmpty(MutList.new())
+    def isEmpty01(): Bool = region r {
+        MutList.isEmpty(new MutList(r))
+    }
 
     @test
-    def isEmpty02(): Bool & Impure = MutList.isEmpty(MutList.range(0, 0))
+    def isEmpty02(): Bool = region r {
+        MutList.isEmpty(MutList.range(r, 0, 0))
+    }
 
     @test
-    def isEmpty03(): Bool & Impure = MutList.isEmpty(MutList.range(0, 1)) == false
+    def isEmpty03(): Bool = region r {
+        MutList.isEmpty(MutList.range(r, 0, 1)) == false
+    }
 
     @test
-    def isEmpty04(): Bool & Impure = MutList.isEmpty(MutList.range(0, 2)) == false
+    def isEmpty04(): Bool = region r {
+        MutList.isEmpty(MutList.range(r, 0, 2)) == false
+    }
 
     @test
-    def isEmpty05(): Bool & Impure = MutList.isEmpty(MutList.range(3, 4)) == false
+    def isEmpty05(): Bool = region r {
+        MutList.isEmpty(MutList.range(r, 3, 4)) == false
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // memberOf                                                                //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def memberOf01(): Bool & Impure = MutList.memberOf(42, MutList.new()) == false
+    def memberOf01(): Bool = region r {
+        MutList.memberOf(42, new MutList(r)) == false
+    }
 
     @test
-    def memberOf02(): Bool & Impure =
-        let v = MutList.new();
+    def memberOf02(): Bool = region r {
+        let v = new MutList(r);
         MutList.push!(2, v);
         MutList.memberOf(2, v)
+    }
 
     @test
-    def memberOf03(): Bool & Impure =
-        let v = MutList.new();
+    def memberOf03(): Bool = region r {
+        let v = new MutList(r);
         MutList.push!(42, v);
         MutList.memberOf(2, v) == false
+    }
 
     @test
-    def memberOf04(): Bool & Impure = MutList.memberOf(4, MutList.range(0, 4)) == false
+    def memberOf04(): Bool = region r {
+        MutList.memberOf(4, MutList.range(r, 0, 4)) == false
+    }
 
     @test
-    def memberOf05(): Bool & Impure = MutList.memberOf(0, MutList.range(0, 3))
+    def memberOf05(): Bool = region r {
+        MutList.memberOf(0, MutList.range(r, 0, 3))
+    }
 
     @test
-    def memberOf06(): Bool & Impure = MutList.memberOf(2, MutList.range(0, 3))
+    def memberOf06(): Bool = region r {
+        MutList.memberOf(2, MutList.range(r, 0, 3))
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // count                                                                   //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def count01(): Bool & Impure = MutList.count(x -> x > 2, MutList.range(0, 4)) == 1
+    def count01(): Bool = region r {
+        MutList.count(x -> x > 2, MutList.range(r, 0, 4)) == 1
+    }
 
     @test
-    def count02(): Bool & Impure = MutList.count(x -> x >= 2, MutList.range(0, 4)) == 2
+    def count02(): Bool = region r {
+        MutList.count(x -> x >= 2, MutList.range(r, 0, 4)) == 2
+    }
 
     @test
-    def count03(): Bool & Impure = MutList.count(x -> x % 2 == 0, MutList.range(0, 10)) == 5
+    def count03(): Bool = region r {
+        MutList.count(x -> x `Int32.rem` 2 == 0, MutList.range(r, 0, 10)) == 5
+    }
 
     @test
-    def count04(): Bool & Impure = MutList.count(x -> x == 11, MutList.range(0, 21)) == 1
+    def count04(): Bool = region r {
+        MutList.count(x -> x == 11, MutList.range(r, 0, 21)) == 1
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // product                                                                 //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def product01(): Bool = region r {
+        new MutList(r) |> MutList.product == 1
+    }
+
+    @test
+    def product02(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.product(l) == 1
+    }
+
+    @test
+    def product03(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: 2 :: 3 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.product(l) == 6
+    }
+
+    @test
+    def product04(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: 2 :: 3 :: -3 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.product(l) == -18
+    }
+
+    @test
+    def product05(): Bool = region r {
+        let l = new MutList(r);
+        let xs = -1 :: -2 :: -3 :: -4 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.product(l) == 24
+    }
+
+    @test
+    def product06(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 10 :: -10 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.product(l) == -100
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // productWith                                                             //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def productWith01(): Bool = region r {
+        new MutList(r) |> MutList.productWith(x -> x + 1) == 1
+    }
+
+    @test
+    def productWith02(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.productWith(x -> x + 1, l) == 2
+    }
+
+    @test
+    def productWith03(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: 2 :: 3 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.productWith(x -> x + 1, l) == 24
+    }
+
+    @test
+    def productWith04(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: 2 :: 3 :: -3 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.productWith(x -> x + 1, l) == -48
+    }
+
+    @test
+    def productWith05(): Bool = region r {
+        let l = new MutList(r);
+        let xs = -2 :: -3 :: -4 :: -5 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.productWith(x -> x + 1, l) == 24
+    }
+
+    @test
+    def productWith06(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 10 :: -10 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.productWith(x -> x + 1, l) == -99
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // exists                                                                  //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def exists01(): Bool & Impure = MutList.exists(x -> x > 9, MutList.range(0, 9)) == false
+    def exists01(): Bool = region r {
+        MutList.exists(x -> x > 9, MutList.range(r, 0, 9)) == false
+    }
 
     @test
-    def exists02(): Bool & Impure = MutList.exists(x -> x < 0, MutList.range(0, 9)) == false
+    def exists02(): Bool = region r {
+        MutList.exists(x -> x < 0, MutList.range(r, 0, 9)) == false
+    }
 
     @test
-    def exists03(): Bool & Impure = MutList.exists(x -> x == 8, MutList.range(0, 9))
+    def exists03(): Bool = region r {
+        MutList.exists(x -> x == 8, MutList.range(r, 0, 9))
+    }
 
     @test
-    def exists04(): Bool & Impure = MutList.exists(x -> x > 0, MutList.range(0, 9))
+    def exists04(): Bool = region r {
+        MutList.exists(x -> x > 0, MutList.range(r, 0, 9))
+    }
 
     @test
-    def exists05(): Bool & Impure = MutList.exists(x -> x == 0, MutList.new()) == false
+    def exists05(): Bool = region r {
+        MutList.exists(x -> x == 0, new MutList(r)) == false
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
-    // forall                                                                  //
+    // forAll                                                                  //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def forall01(): Bool & Impure = MutList.forall(x -> x > 0, MutList.range(0, 9)) == false
+    def forAll01(): Bool = region r {
+        MutList.forAll(x -> x > 0, MutList.range(r, 0, 9)) == false
+    }
 
     @test
-    def forall02(): Bool & Impure = MutList.forall(x -> x >= 0, MutList.range(0, 9))
+    def forAll02(): Bool = region r {
+        MutList.forAll(x -> x >= 0, MutList.range(r, 0, 9))
+    }
 
     @test
-    def forall03(): Bool & Impure = MutList.forall(x -> x >= 0 and x < 9, MutList.range(0, 9))
+    def forAll03(): Bool = region r {
+        MutList.forAll(x -> x >= 0 and x < 9, MutList.range(r, 0, 9))
+    }
 
     @test
-    def forall05(): Bool & Impure = MutList.forall(x -> x > 0, MutList.new())
+    def forAll05(): Bool = region r {
+        MutList.forAll(x -> x > 0, new MutList(r))
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // head                                                                    //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def head01(): Bool & Impure =
-        let v = MutList.new();
+    def head01(): Bool = region r {
+        let v = new MutList(r);
         MutList.push!(42, v);
         MutList.head(v) == Some(42)
+    }
 
     @test
-    def head02(): Bool & Impure = MutList.head(MutList.new(): MutList[Unit]) == None
+    def head02(): Bool = region r {
+        MutList.head(new MutList(r): MutList[Unit, _]) == None
+    }
 
     @test
-    def head03(): Bool & Impure =
-        let v = MutList.new();
+    def head03(): Bool = region r {
+        let v = new MutList(r);
         MutList.push!(101, v);
         MutList.push!(102, v);
         MutList.head(v) == Some(101)
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // last                                                                    //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def last01(): Bool & Impure = MutList.last(MutList.new(): MutList[Unit]) == None
+    def last01(): Bool = region r {
+        MutList.last(new MutList(r): MutList[Unit, _]) == None
+    }
 
     @test
-    def last02(): Bool & Impure = MutList.last(MutList.range(0, 8)) == Some(7)
+    def last02(): Bool = region r {
+        MutList.last(MutList.range(r, 0, 8)) == Some(7)
+    }
 
     @test
-    def last03(): Bool & Impure =
-        let v = MutList.new();
+    def last03(): Bool = region r {
+        let v = new MutList(r);
         MutList.push!('A', v);
         MutList.push!('B', v);
         MutList.last(v) == Some('B')
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // indexOfLeft                                                             //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def indexOfLeft01(): Bool & Impure = MutList.indexOfLeft(2, MutList.range(2, 3)) == Some(0)
+    def indexOfLeft01(): Bool = region r {
+        MutList.indexOfLeft(2, MutList.range(r, 2, 3)) == Some(0)
+    }
 
     @test
-    def indexOfLeft02(): Bool & Impure = MutList.indexOfLeft(10, MutList.range(0, 10)) == None
+    def indexOfLeft02(): Bool = region r {
+        MutList.indexOfLeft(10, MutList.range(r, 0, 10)) == None
+    }
 
     @test
-    def indexOfLeft03(): Bool & Impure =
-        let v = MutList.new();
+    def indexOfLeft03(): Bool = region r {
+        let v = new MutList(r);
         MutList.push!('A', v);
         MutList.push!('B', v);
         MutList.push!('C', v);
         MutList.indexOfLeft('B', v) == Some(1)
+    }
 
     @test
-    def indexOfLeft04(): Bool & Impure = MutList.indexOfLeft(99, MutList.range(0, 100)) == Some(99)
+    def indexOfLeft04(): Bool = region r {
+        MutList.indexOfLeft(99, MutList.range(r, 0, 100)) == Some(99)
+    }
 
     /////////////////////////////////////////////////////////////////////////////
     // indexOfRight                                                            //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def indexOfRight01(): Bool & Impure = MutList.indexOfRight(2, MutList.range(2, 3)) == Some(0)
+    def indexOfRight01(): Bool = region r {
+        MutList.indexOfRight(2, MutList.range(r, 2, 3)) == Some(0)
+    }
 
     @test
-    def indexOfRight02(): Bool & Impure = MutList.indexOfRight(10, MutList.range(0, 10)) == None
+    def indexOfRight02(): Bool = region r {
+        MutList.indexOfRight(10, MutList.range(r, 0, 10)) == None
+    }
 
     @test
-    def indexOfRight03(): Bool & Impure =
-        let v = MutList.new();
+    def indexOfRight03(): Bool = region r {
+        let v = new MutList(r);
         MutList.push!('A', v);
         MutList.push!('B', v);
         MutList.push!('A', v);
         MutList.indexOfRight('A', v) == Some(2)
+    }
 
     @test
-    def indexOfRight04(): Bool & Impure =
-        let v1 = MutList.range(0, 4);
-        let v2 = MutList.range(0, 4);
-        MutList.append!(v1, v2);
+    def indexOfRight04(): Bool = region r {
+        let v1 = MutList.range(r, 0, 4);
+        let v2 = MutList.range(r, 0, 4);
+        MutList.append!(MutList.toList(v2), v1);
         MutList.indexOfRight(2, v1) == Some(6)
+    }
 
     /////////////////////////////////////////////////////////////////////////////
     // findLeft                                                                //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def findLeft01(): Bool & Impure = MutList.findLeft(x -> x > 3, MutList.range(3, 11)) == Some(4)
+    def findLeft01(): Bool = region r {
+        MutList.findLeft(x -> x > 3, MutList.range(r, 3, 11)) == Some(4)
+    }
 
     @test
-    def findLeft02(): Bool & Impure = MutList.findLeft(x -> x > 10, MutList.range(3, 11)) == None
+    def findLeft02(): Bool = region r {
+        MutList.findLeft(x -> x > 10, MutList.range(r, 3, 11)) == None
+    }
 
     @test
-    def findLeft03(): Bool & Impure = MutList.findLeft(x -> x < 3, MutList.range(3, 11)) == None
+    def findLeft03(): Bool = region r {
+        MutList.findLeft(x -> x < 3, MutList.range(r, 3, 11)) == None
+    }
 
     @test
-    def findLeft04(): Bool & Impure = MutList.findLeft(x -> x % 2 == 1, MutList.range(3, 11)) == Some(3)
+    def findLeft04(): Bool = region r {
+        MutList.findLeft(x -> x `Int32.rem` 2 == 1, MutList.range(r, 3, 11)) == Some(3)
+    }
 
     /////////////////////////////////////////////////////////////////////////////
     // findRight                                                               //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def findRight01(): Bool & Impure = MutList.findRight(x -> x > 0, MutList.range(2, 5)) == Some(4)
+    def findRight01(): Bool = region r {
+        MutList.findRight(x -> x > 0, MutList.range(r, 2, 5)) == Some(4)
+    }
 
     @test
-    def findRight02(): Bool & Impure = MutList.findRight(x -> x == 10, MutList.range(9, 10)) == None
+    def findRight02(): Bool = region r {
+        MutList.findRight(x -> x == 10, MutList.range(r, 9, 10)) == None
+    }
 
     @test
-    def findRight03(): Bool & Impure = MutList.findRight(x -> x % 2 == 0, MutList.range(3, 4)) == None
+    def findRight03(): Bool = region r {
+        MutList.findRight(x -> x `Int32.rem` 2 == 0, MutList.range(r, 3, 4)) == None
+    }
 
     @test
-    def findRight04(): Bool & Impure = MutList.findRight(x -> x < 5, MutList.range(3, 11)) == Some(4)
+    def findRight04(): Bool = region r {
+        MutList.findRight(x -> x < 5, MutList.range(r, 3, 11)) == Some(4)
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // scanLeft                                                                //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def scanLeft01(): Bool & Impure =
-        let v = MutList.scanLeft((x, y) -> x + y, 0, MutList.new());
+    def scanLeft01(): Bool = region r {
+        let v = MutList.scanLeft(r, (x, y) -> x + y, 0, new MutList(r));
         MutList.length(v) == 1 and MutList.head(v) == Some(0)
+    }
 
     @test
-    def scanLeft02(): Bool & Impure =
-        let v1 = MutList.range(1, 6);
-        let v2 = MutList.new();
+    def scanLeft02(): Bool = region r {
+        let v1 = MutList.range(r, 1, 6);
+        let v2 = new MutList(r);
         MutList.push!(0, v2);
         MutList.push!(1, v2);
         MutList.push!(3, v2);
         MutList.push!(6, v2);
         MutList.push!(10, v2);
         MutList.push!(15, v2);
-        let v3 = MutList.scanLeft((x, y) -> x + y, 0, v1);
+        let v3 = MutList.scanLeft(r, (x, y) -> x + y, 0, v1);
         MutList.sameElements(v2, v3)
+    }
 
     @test
-    def scanLeft03(): Bool & Impure =
-        let v = MutList.scanLeft((x, y) -> x + y, 7, MutList.range(5, 13));
+    def scanLeft03(): Bool = region r {
+        let v = MutList.scanLeft(r, (x, y) -> x + y, 7, MutList.range(r, 5, 13));
         MutList.last(v) == Some(75)
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // scanRight                                                               //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def scanRight01(): Bool & Impure =
-        let v = MutList.scanRight((x, y) -> x + y, 0, MutList.new());
+    def scanRight01(): Bool = region r {
+        let v = MutList.scanRight(r, (x, y) -> x + y, 0, new MutList(r));
         MutList.length(v) == 1 and MutList.head(v) == Some(0)
+    }
 
     @test
-    def scanRight02(): Bool & Impure =
-        let v1 = MutList.range(1, 6);
-        let v2 = MutList.new();
+    def scanRight02(): Bool = region r {
+        let v1 = MutList.range(r, 1, 6);
+        let v2 = new MutList(r);
         MutList.push!(15, v2);
         MutList.push!(14, v2);
         MutList.push!(12, v2);
         MutList.push!(9, v2);
         MutList.push!(5, v2);
         MutList.push!(0, v2);
-        let v3 = MutList.scanRight((x, y) -> x + y, 0, v1);
+        let v3 = MutList.scanRight(r, (x, y) -> x + y, 0, v1);
         MutList.sameElements(v2, v3)
+    }
 
     @test
-    def scanRight03(): Bool & Impure =
-        let v = MutList.scanRight((x, y) -> x + y, 7, MutList.range(5, 13));
+    def scanRight03(): Bool = region r {
+        let v = MutList.scanRight(r, (x, y) -> x + y, 7, MutList.range(r, 5, 13));
         MutList.last(v) == Some(7)
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // map                                                                     //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def map01(): Bool & Impure =
-        let v = MutList.map(x -> x * 2, MutList.range(0, 6));
-        MutList.sameElements(v, Array.toMutList([0, 2, 4, 6, 8, 10]))
+    def map01(): Bool = region r {
+        let v = MutList.map(r, x -> x * 2, MutList.range(r, 0, 6));
+        MutList.sameElements(v, Array.toMutList(r, Array#{0, 2, 4, 6, 8, 10} @ r))
+    }
 
     @test
-    def map02(): Bool & Impure =
-        let v = MutList.map(identity, MutList.range(0, 10));
-        MutList.sameElements(v, MutList.range(0, 10))
+    def map02(): Bool = region r {
+        let v = MutList.map(r, identity, MutList.range(r, 0, 10));
+        MutList.sameElements(v, MutList.range(r, 0, 10))
+    }
 
     @test
-    def map03(): Bool & Impure =
-        let v = MutList.map(identity, MutList.new(): MutList[Unit]);
-        MutList.sameElements(v, MutList.new())
+    def map03(): Bool = region r {
+        let v = MutList.map(r, identity, new MutList(r): MutList[Unit, _]);
+        MutList.sameElements(v, new MutList(r))
+    }
 
     @test
-    def map04(): Bool & Impure =
-        let v = MutList.map(x -> x + 1, MutList.range(0, 100));
-        MutList.sameElements(v, MutList.range(1, 101))
+    def map04(): Bool = region r {
+        let v = MutList.map(r, x -> x + 1, MutList.range(r, 0, 100));
+        MutList.sameElements(v, MutList.range(r, 1, 101))
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // transform!                                                              //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def transform!01(): Bool & Impure =
-        let v = MutList.range(0, 6);
+    def transform!01(): Bool = region r {
+        let v = MutList.range(r, 0, 6);
         MutList.transform!(x -> x * 2, v);
-        MutList.sameElements(v, Array.toMutList([0, 2, 4, 6, 8, 10]))
+        MutList.sameElements(v, Array.toMutList(r, Array#{0, 2, 4, 6, 8, 10} @ r))
+    }
 
     @test
-    def transform!02(): Bool & Impure =
-        let v = MutList.range(0, 10);
+    def transform!02(): Bool = region r {
+        let v = MutList.range(r, 0, 10);
         MutList.transform!(identity, v);
-        MutList.sameElements(v, MutList.range(0, 10))
+        MutList.sameElements(v, MutList.range(r, 0, 10))
+    }
 
     @test
-    def transform!03(): Bool & Impure =
-        let v: MutList[Unit] = MutList.new();
+    def transform!03(): Bool = region r {
+        let v: MutList[Unit, _] = new MutList(r);
         MutList.transform!(identity, v);
-        MutList.sameElements(v, MutList.new())
+        MutList.sameElements(v, new MutList(r))
+    }
 
     @test
-    def transform!04(): Bool & Impure =
-        let v = MutList.range(0, 100);
+    def transform!04(): Bool = region r {
+        let v = MutList.range(r, 0, 100);
         MutList.transform!(x -> x + 1, v);
-        MutList.sameElements(v, MutList.range(1, 101))
+        MutList.sameElements(v, MutList.range(r, 1, 101))
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // mapWithIndex                                                            //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def mapWithIndex01(): Bool & Impure =
-        let v = MutList.mapWithIndex((_, i) -> if (i < 3) 0 else 1, MutList.range(0, 6));
-        MutList.sameElements(v, Array.toMutList([0, 0, 0, 1, 1, 1]))
+    def mapWithIndex01(): Bool = region r {
+        let v = MutList.mapWithIndex(r, (i, _) -> if (i < 3) 0 else 1, MutList.range(r, 0, 6));
+        MutList.sameElements(v, Array.toMutList(r, Array#{0, 0, 0, 1, 1, 1} @ r))
+    }
 
     @test
-    def mapWithIndex02(): Bool & Impure =
-        let v = MutList.mapWithIndex((x, i) -> if (x == 8 and i == 1) 42 else 0, MutList.range(7, 10));
-        MutList.sameElements(v, Array.toMutList([0, 42, 0]))
+    def mapWithIndex02(): Bool = region r {
+        let v = MutList.mapWithIndex(r, (i, x) -> if (x == 8 and i == 1) 42 else 0, MutList.range(r, 7, 10));
+        MutList.sameElements(v, Array.toMutList(r, Array#{0, 42, 0} @ r))
+    }
 
     @test
-    def mapWithIndex03(): Bool & Impure =
-        let v = MutList.mapWithIndex((_, i) -> if (i == 0) 42 else 0, MutList.new());
-        MutList.sameElements(v, MutList.new())
+    def mapWithIndex03(): Bool = region r {
+        let v = MutList.mapWithIndex(r, (i, _) -> if (i == 0) 42 else 0, new MutList(r));
+        MutList.sameElements(v, new MutList(r))
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // transformWithIndex!                                                     //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def transformWithIndex!01(): Bool & Impure =
-        let v = MutList.range(0, 6);
-        MutList.transformWithIndex!((_, i) -> if (i < 3) 0 else 1, v);
-        MutList.sameElements(v, Array.toMutList([0, 0, 0, 1, 1, 1]))
+    def transformWithIndex!01(): Bool = region r {
+        let v = MutList.range(r, 0, 6);
+        MutList.transformWithIndex!((i, _) -> if (i < 3) 0 else 1, v);
+        MutList.sameElements(v, Array.toMutList(r, Array#{0, 0, 0, 1, 1, 1} @ r))
+    }
 
     @test
-    def transformWithIndex!02(): Bool & Impure =
-        let v = MutList.range(7, 10);
-        MutList.transformWithIndex!((x, i) -> if (x == 8 and i == 1) 42 else 0, v);
-        MutList.sameElements(v, Array.toMutList([0, 42, 0]))
+    def transformWithIndex!02(): Bool = region r {
+        let v = MutList.range(r, 7, 10);
+        MutList.transformWithIndex!((i, x) -> if (x == 8 and i == 1) 42 else 0, v);
+        MutList.sameElements(v, Array.toMutList(r, Array#{0, 42, 0} @ r))
+    }
 
     @test
-    def transformWithIndex!03(): Bool & Impure =
-        let v = MutList.new();
-        MutList.transformWithIndex!((_, i) -> if (i == 0) 42 else 0, v);
-        MutList.sameElements(v, MutList.new())
+    def transformWithIndex!03(): Bool = region r {
+        let v = new MutList(r);
+        MutList.transformWithIndex!((i, _) -> if (i == 0) 42 else 0, v);
+        MutList.sameElements(v, new MutList(r))
+    }
 
-    /////////////////////////////////////////////////////////////////////////////
-    // fold                                                                    //
-    /////////////////////////////////////////////////////////////////////////////
-
-    @test
-    def fold01(): Bool & Impure =
-        let v: MutList[Unit] = MutList.new();
-        MutList.fold(v) == ()
-
-    @test
-    def fold02(): Bool & Impure =
-        let v = MutList.new();
-        MutList.push!("a", v);
-        MutList.fold(v) == "a"
-
-    @test
-    def fold03(): Bool & Impure =
-        let v = MutList.new();
-        MutList.push!("a", v);
-        MutList.push!("b", v);
-        MutList.push!("c", v);
-        MutList.fold(v) == "abc"
-
-    @test
-    def fold04(): Bool & Impure =
-        let v = MutList.new();
-        MutList.push!(("a", "d"), v);
-        MutList.push!(("b", "e"), v);
-        MutList.push!(("c", "f"), v);
-        MutList.fold(v) == ("abc", "def")
 
     /////////////////////////////////////////////////////////////////////////////
     // foldLeft                                                                //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def foldLeft01(): Bool & Impure = MutList.foldLeft((acc, x) -> acc + x, 0, MutList.range(1, 5)) == 10
+    def foldLeft01(): Bool = region r {
+        MutList.foldLeft((acc, x) -> acc + x, 0, MutList.range(r, 1, 5)) == 10
+    }
 
     @test
-    def foldLeft02(): Bool & Impure =
-        let v1 = MutList.new();
-        let v2 = MutList.range(0, 10);
+    def foldLeft02(): Bool = region r {
+        let v1 = new MutList(r);
+        let v2 = MutList.range(r, 0, 10);
         MutList.foldLeft((_, x) -> MutList.push!(x, v1), (), v2);
         MutList.sameElements(v1, v2)
+    }
 
     @test
-    def foldLeft03(): Bool & Impure = MutList.foldLeft((acc, x) -> x :: acc, Nil, MutList.range(0, 6)) == 5 :: 4 :: 3 :: 2 :: 1 :: 0 :: Nil
+    def foldLeft03(): Bool = region r {
+        MutList.foldLeft((acc, x) -> x :: acc, Nil, MutList.range(r, 0, 6)) == 5 :: 4 :: 3 :: 2 :: 1 :: 0 :: Nil
+    }
 
     @test
-    def foldLeft04(): Bool & Impure = MutList.foldLeft((acc, x) -> acc - x, 0, MutList.range(0, 100)) == -4950
+    def foldLeft04(): Bool = region r {
+        MutList.foldLeft((acc, x) -> acc - x, 0, MutList.range(r, 0, 100)) == -4950
+    }
 
     @test
-    def foldLeft05(): Bool & Impure = MutList.foldRight((acc, x) -> acc + x, 42, MutList.new()) == 42
+    def foldLeft05(): Bool = region r {
+        MutList.foldLeft((acc, x) -> acc + x, 42, new MutList(r)) == 42
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // foldRight                                                               //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def foldRight01(): Bool & Impure = MutList.foldRight((x, acc) -> acc + x, 0, MutList.range(1, 5)) == 10
+    def foldRight01(): Bool = region r {
+        MutList.foldRight((x, acc) -> acc + x, 0, MutList.range(r, 1, 5)) == 10
+    }
 
     @test
-    def foldRight02(): Bool & Impure = MutList.foldRight((x, acc) -> Int32.toString(x) + acc, "", MutList.range(3, 8)) == "34567"
+    def foldRight02(): Bool = region r {
+        MutList.foldRight((x, acc) -> Int32.toString(x) + acc, "", MutList.range(r, 3, 8)) == "34567"
+    }
 
     @test
-    def foldRight03(): Bool & Impure = MutList.foldRight((x, acc) -> x :: acc, Nil, MutList.range(0, 6)) == 0 :: 1 :: 2 :: 3 :: 4 :: 5 :: Nil
+    def foldRight03(): Bool = region r {
+        MutList.foldRight((x, acc) -> x :: acc, Nil, MutList.range(r, 0, 6)) == 0 :: 1 :: 2 :: 3 :: 4 :: 5 :: Nil
+    }
 
     @test
-    def foldRight04(): Bool & Impure = MutList.foldRight((x, acc) -> x - acc, 0, MutList.range(0, 100)) == -50
+    def foldRight04(): Bool = region r {
+        MutList.foldRight((x, acc) -> x - acc, 0, MutList.range(r, 0, 100)) == -50
+    }
 
     @test
-    def foldRight05(): Bool & Impure = MutList.foldRight((x, acc) -> x + acc, 42, MutList.new()) == 42
+    def foldRight05(): Bool = region r {
+        MutList.foldRight((x, acc) -> x + acc, 42, new MutList(r)) == 42
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // foldRightWithCont                                                       //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def foldRightWithCont01(): Bool = region r {
+        MutList.foldRightWithCont((x, k) -> k() + x, 0, MutList.range(r, 1, 5)) == 10
+    }
+
+    @test
+    def foldRightWithCont02(): Bool = region r {
+        MutList.foldRightWithCont((x, k) -> Int32.toString(x) + k(), "", MutList.range(r, 3, 8)) == "34567"
+    }
+
+    @test
+    def foldRightWithCont03(): Bool = region r {
+        MutList.foldRightWithCont((x, k) -> x :: k(), Nil, MutList.range(r, 0, 6)) == 0 :: 1 :: 2 :: 3 :: 4 :: 5 :: Nil
+    }
+
+    @test
+    def foldRightWithCont04(): Bool = region r {
+        MutList.foldRightWithCont((x, k) -> x - k(), 0, MutList.range(r, 0, 100)) == -50
+    }
+
+    @test
+    def foldRightWithCont05(): Bool = region r {
+        MutList.foldRightWithCont((x, k) -> x + k(), 42, new MutList(r)) == 42
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // foldMap                                                                 //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def foldMap01(): Bool = region r {
+        MutList.foldMap(x -> 2 * x, List.toMutList(r, Nil: List[Int32])) == 0
+    }
+
+    @test
+    def foldMap02(): Bool = region r {
+        MutList.foldMap(x -> 2 * x, List.toMutList(r, 1 :: 2 :: Nil)) == 6
+    }
+
+    @test
+    def foldMap03(): Bool = region r {
+        MutList.foldMap(x -> if (x == "a") "b" else x, List.toMutList(r, "a" :: Nil)) == "b"
+    }
+
+    @test
+    def foldMap04(): Bool = region r {
+        MutList.foldMap(x -> if (x == "c") "b" else x, List.toMutList(r, "a" :: "b" :: "c":: Nil)) == "abb"
+    }
+
+    @test
+    def foldMap05(): Bool = region r {
+        MutList.foldMap(Int32.toString, List.toMutList(r, 1 :: 2 :: 3 :: Nil)) == "123"
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // reduceLeft                                                              //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def reduceLeft01(): Bool & Impure = MutList.reduceLeft((x, y) -> x + y, MutList.new(): MutList[Int32]) == None
+    def reduceLeft01(): Bool = region r {
+        MutList.reduceLeft((x, y) -> x + y, new MutList(r): MutList[Int32, _]) == None
+    }
 
     @test
-    def reduceLeft02(): Bool & Impure = MutList.reduceLeft((x, y) -> x + y, MutList.range(0, 5)) == Some(10)
+    def reduceLeft02(): Bool = region r {
+        MutList.reduceLeft((x, y) -> x + y, MutList.range(r, 0, 5)) == Some(10)
+    }
 
     @test
-    def reduceLeft03(): Bool & Impure = MutList.reduceLeft((x, y) -> x - y, MutList.range(0, 101)) == Some(-5050)
+    def reduceLeft03(): Bool = region r {
+        MutList.reduceLeft((x, y) -> x - y, MutList.range(r, 0, 101)) == Some(-5050)
+    }
 
     @test
-    def reduceLeft04(): Bool & Impure = MutList.reduceLeft((_, y) -> if (y > 4) 1 else 0, MutList.range(0, 6)) == Some(1)
+    def reduceLeft04(): Bool = region r {
+        MutList.reduceLeft((_, y) -> if (y > 4) 1 else 0, MutList.range(r, 0, 6)) == Some(1)
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // reduceRight                                                             //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def reduceRight01(): Bool & Impure = MutList.reduceRight((x, y) -> x + y, MutList.new(): MutList[Int32]) == None
+    def reduceRight01(): Bool = region r {
+        MutList.reduceRight((x, y) -> x + y, new MutList(r): MutList[Int32, _]) == None
+    }
 
     @test
-    def reduceRight02(): Bool & Impure = MutList.reduceRight((x, y) -> x + y, MutList.range(0, 5)) == Some(10)
+    def reduceRight02(): Bool = region r {
+        MutList.reduceRight((x, y) -> x + y, MutList.range(r, 0, 5)) == Some(10)
+    }
 
     @test
-    def reduceRight03(): Bool & Impure = MutList.reduceRight((x, y) -> x - y, MutList.range(0, 6)) == Some(-3)
+    def reduceRight03(): Bool = region r {
+        MutList.reduceRight((x, y) -> x - y, MutList.range(r, 0, 6)) == Some(-3)
+    }
 
     @test
-    def reduceRight04(): Bool & Impure = MutList.reduceRight((x, _) -> if (x < 2) 1 else 0, MutList.range(0, 6)) == Some(1)
+    def reduceRight04(): Bool = region r {
+        MutList.reduceRight((x, _) -> if (x < 2) 1 else 0, MutList.range(r, 0, 6)) == Some(1)
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // clear!                                                                  //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def clear!01(): Bool & Impure =
-        let v = MutList.range(0, 1);
+    def clear!01(): Bool = region r {
+        let v = MutList.range(r, 0, 1);
         let len = MutList.length(v);
         MutList.clear!(v);
         len == 1 and MutList.isEmpty(v)
+    }
 
     @test
-    def clear!02(): Bool & Impure =
-        let v = MutList.new();
+    def clear!02(): Bool = region r {
+        let v = new MutList(r);
         let len = MutList.length(v);
         MutList.clear!(v);
         len == MutList.length(v)
+    }
 
     @test
-    def clear!03(): Bool & Impure =
-        let v = MutList.range(0, 100);
+    def clear!03(): Bool = region r {
+        let v = MutList.range(r, 0, 100);
         MutList.clear!(v);
         MutList.isEmpty(v)
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // copy                                                                    //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def copy01(): Bool & Impure =
-        let v1 = MutList.range(0, 6);
-        let v2 = MutList.copy(v1);
-        MutList.clear!(v1);
-        MutList.length(v1) == 0 and MutList.length(v2) == 6
+    def copy01(): Bool = region r {
+        let v1 = MutList.range(r, 0, 6);
+        let v2 = MutList.copy(r, v1);
+        v1 `sameElements` v2
+    }
 
     @test
-    def copy02(): Bool & Impure =
-        let v1 = MutList.range(0, 100);
-        let v2 = MutList.copy(v1);
+    def copy02(): Bool = region r {
+        let v1 = MutList.range(r, 0, 100);
+        let v2 = MutList.copy(r, v1);
         MutList.transform!(x -> x + 1, v2);
         MutList.last(v1) == Some(99) and MutList.last(v2) == Some(100)
+    }
 
     @test
-    def copy03(): Bool & Impure =
-        let v1 = MutList.range(0, 6);
-        let v2 = MutList.copy(v1);
+    def copy03(): Bool = region r {
+        let v1 = MutList.range(r, 0, 6);
+        let v2 = MutList.copy(r, v1);
         MutList.clear!(v1);
         MutList.length(v1) == 0 and MutList.length(v2) == 6
+    }
+
+    @test
+    def copy04(): Bool = region r {
+        let v1 = MutList.range(r, 0, 1000);
+        let MutList(_, l1, n1) = v1;
+        let MutList(_, l2, n2) = MutList.copy(r, v1);
+        (deref n1 == deref n2) and (deref l1 `Array.sameElements` deref l2)
+    }
+
+    @test
+    def copy05(): Bool = region r {
+        let v1 = MutList.range(r, 0, 3);
+        let MutList(_, l1, n1) = v1;
+        let MutList(_, l2, n2) = MutList.copy(r, v1);
+        (deref n1 == deref n2) and (deref l1 `Array.sameElements` deref l2) and
+            (Array.length(deref l2) == 8)
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // pop                                                                     //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def pop01(): Bool & Impure =
-        let v = MutList.range(0, 6);
+    def pop01(): Bool = region r {
+        let v = MutList.range(r, 0, 6);
         let len = MutList.length(v);
         let last = MutList.pop!(v);
         MutList.length(v) == len - 1 and last == Some(5)
+    }
 
     @test
-    def pop02(): Bool & Impure =
-        let v: MutList[Unit] = MutList.new();
+    def pop02(): Bool = region r {
+        let v: MutList[Unit, _] = new MutList(r);
         MutList.pop!(v) == None
+    }
 
     @test
-    def pop03(): Bool & Impure =
-        let v = MutList.range(1, 4);
+    def pop03(): Bool = region r {
+        let v = MutList.range(r, 1, 4);
         let three = MutList.pop!(v);
         let two = MutList.pop!(v);
         let one = MutList.pop!(v);
         let none = MutList.pop!(v);
         three == Some(3) and two == Some(2) and one == Some(1) and none == None
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // push                                                                    //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def push01(): Bool & Impure =
-        let v = MutList.new();
+    def push01(): Bool = region r {
+        let v = new MutList(r);
         let len = MutList.length(v);
         MutList.push!(1, v);
         MutList.last(v) == Some(1) and MutList.length(v) == len + 1
+    }
 
     @test
-    def push02(): Bool & Impure =
-        let v = MutList.new();
+    def push02(): Bool = region r {
+        let v = new MutList(r);
         let len = MutList.length(v);
-        List.foreach(x -> MutList.push!(x, v), List.range(0, 97));
+        List.forEach(x -> MutList.push!(x, v), List.range(0, 97));
         MutList.head(v) == Some(0) and MutList.last(v) == Some(96) and MutList.length(v) == len + 97
+    }
 
     @test
-    def push03(): Bool & Impure =
-        let v = MutList.new();
+    def push03(): Bool = region r {
+        let v = new MutList(r);
         MutList.push!(42, v);
         MutList.push!(31, v);
         MutList.push!(1019, v);
-        MutList.length(v) == 3 and MutList.get(0, v) == 42 and MutList.get(1, v) == 31 and MutList.get(2, v) == 1019
+        MutList.length(v) == 3 and MutList.nth(0, v) == Some(42) and MutList.nth(1, v) == Some(31) and MutList.nth(2, v) == Some(1019)
+    }
 
     @test
-    def push04(): Bool & Impure =
-        let v = MutList.new();
+    def push04(): Bool = region r {
+        let v = new MutList(r);
         MutList.push!(0, v);
         MutList.push!(0, v);
         MutList.push!(0, v);
         MutList.push!(0, v);
-        MutList.length(v) == 4 and MutList.get(0, v) == 0 and MutList.get(1, v) == 0 and MutList.get(2, v) == 0 and MutList.get(3, v) == 0
+        MutList.length(v) == 4 and MutList.nth(0, v) == Some(0) and MutList.nth(1, v) == Some(0) and MutList.nth(2, v) == Some(0) and MutList.nth(3, v) == Some(0)
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // insert!                                                                 //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def insert!01(): Bool & Impure =
-        let v = MutList.new();
+    def insert!01(): Bool = region r {
+        let v = new MutList(r);
         MutList.insert!(42, 0, v);
         MutList.length(v) == 1 and MutList.head(v) == Some(42)
+    }
 
     @test
-    def insert!02(): Bool & Impure =
-        let v = MutList.new();
+    def insert!02(): Bool = region r {
+        let v = new MutList(r);
         MutList.insert!(107, 0, v);
         MutList.insert!(7, 0, v);
         MutList.length(v) == 2 and MutList.head(v) == Some(7)
+    }
 
     @test
-    def insert!03(): Bool & Impure =
-        let v = MutList.new();
-        List.foreach(x -> MutList.insert!(x, 0, v), List.range(0, 107));
+    def insert!03(): Bool = region r {
+        let v = new MutList(r);
+        List.forEach(x -> MutList.insert!(x, 0, v), List.range(0, 107));
         MutList.length(v) == 107 and MutList.head(v) == Some(106)
+    }
 
     @test
-    def insert!04(): Bool & Impure =
-        let v = MutList.new();
+    def insert!04(): Bool = region r {
+        let v = new MutList(r);
         MutList.insert!(42, 0, v);
         MutList.insert!(3, 1, v);
         MutList.insert!(5, 2, v);
         MutList.insert!(6, 0, v);
         MutList.length(v) == 4 and MutList.head(v) == Some(6) and MutList.last(v) == Some(5)
+    }
 
     @test
-    def insert!05(): Bool & Impure =
-        let v = MutList.new();
-        List.foreach(x -> MutList.push!(x, v), List.range(97, 147));
+    def insert!05(): Bool = region r {
+        let v = new MutList(r);
+        List.forEach(x -> MutList.push!(x, v), List.range(97, 147));
         MutList.insert!(42, 0, v);
         MutList.insert!(49, 0, v);
         MutList.length(v) == 52 and MutList.head(v) == Some(49) and MutList.last(v) == Some(146)
+    }
 
     @test
-    def insert!06(): Bool & Impure =
-        let v = MutList.new();
+    def insert!06(): Bool = region r {
+        let v = new MutList(r);
         MutList.insert!(42, 0, v);
         MutList.insert!(42, 0, v);
         MutList.insert!(42, 0, v);
@@ -664,707 +1139,1468 @@ namespace TestMutList {
         MutList.insert!(97, 0, v);
         MutList.insert!(98, 2, v);
         MutList.length(v) == 6 and MutList.head(v) == Some(97) and MutList.last(v) == Some(42)
+    }
 
     @test
-    def insert!07(): Bool & Impure =
-        let v = MutList.new();
+    def insert!07(): Bool = region r {
+        let v = new MutList(r);
         MutList.insert!(97, 0, v);
         MutList.insert!(98, 1, v);
         MutList.insert!(99, 2, v);
         MutList.insert!(107, 1, v);
-        MutList.length(v) == 4 and MutList.get(1, v) == 107
+        MutList.length(v) == 4 and MutList.nth(1, v) == Some(107)
+    }
 
     @test
-    def insert!08(): Bool & Impure =
-        let v = MutList.range(0, 4);
-        MutList.insert!(42, 3, v);
-        MutList.insert!(41, 2, v);
-        MutList.insert!(40, 1, v);
-        MutList.insert!(55, 0, v);
-        MutList.insert!(33, 1, v);
-        MutList.sameElements(v, List.toMut(55 :: 33 :: 0 :: 40 :: 1 :: 41 :: 2 :: 42 :: 3 :: Nil))
+    def insert!08(): Bool = region r {
+        let l1 = MutList.range(r, 0, 4);
+        MutList.insert!(42, 3, l1);
+        MutList.insert!(41, 2, l1);
+        MutList.insert!(40, 1, l1);
+        MutList.insert!(55, 0, l1);
+        MutList.insert!(33, 1, l1);
+        let l2 = new MutList(r);
+        let xs = 55 :: 33 :: 0 :: 40 :: 1 :: 41 :: 2 :: 42 :: 3 :: Nil;
+        List.forEach(x -> MutList.push!(x, l2), xs);
+        MutList.sameElements(l1, l2)
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // remove!                                                                 //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def remove!01(): Bool & Impure =
-        let v: MutList[Unit] = MutList.new();
+    def remove!01(): Bool = region r {
+        let v: MutList[Unit, _] = new MutList(r);
         MutList.remove!(0, v);
-        MutList.sameElements(v, MutList.new())
+        MutList.sameElements(v, new MutList(r))
+    }
 
     @test
-    def remove!02(): Bool & Impure =
-        let v = MutList.range(0, 4);
+    def remove!02(): Bool = region r {
+        let v = MutList.range(r, 0, 4);
         MutList.remove!(0, v);
-        MutList.sameElements(v, MutList.range(1, 4))
+        MutList.sameElements(v, MutList.range(r, 1, 4))
+    }
 
     @test
-    def remove!03(): Bool & Impure =
-        let v = MutList.range(0, 4);
+    def remove!03(): Bool = region r {
+        let v = MutList.range(r, 0, 4);
         MutList.remove!(3, v);
-        MutList.sameElements(v, MutList.range(0, 3))
+        MutList.sameElements(v, MutList.range(r, 0, 3))
+    }
 
     @test
-    def remove!04(): Bool & Impure =
-        let v = MutList.range(3, 7);
+    def remove!04(): Bool = region r {
+        let v = MutList.range(r, 3, 7);
         MutList.remove!(0, v);
         MutList.remove!(0, v);
         MutList.remove!(0, v);
-        MutList.sameElements(v, MutList.range(6, 7))
+        MutList.sameElements(v, MutList.range(r, 6, 7))
+    }
 
     @test
-    def remove!05(): Bool & Impure =
-        let v = MutList.range(9, 12);
+    def remove!05(): Bool = region r {
+        let v = MutList.range(r, 9, 12);
         MutList.remove!(2, v);
         MutList.remove!(1, v);
         MutList.remove!(0, v);
-        MutList.sameElements(v, MutList.new())
+        MutList.sameElements(v, new MutList(r))
+    }
 
     @test
-    def remove!06(): Bool & Impure =
-        let v = MutList.range(7, 13);
+    def remove!06(): Bool = region r {
+        let v = MutList.range(r, 7, 13);
         MutList.remove!(0, v);
         MutList.remove!(0, v);
         MutList.remove!(0, v);
         MutList.remove!(0, v);
         MutList.remove!(0, v);
         MutList.remove!(0, v);
-        MutList.sameElements(v, MutList.new())
+        MutList.sameElements(v, new MutList(r))
+    }
 
     @test
-    def remove!07(): Bool & Impure =
-        let v = MutList.range(0, 3);
+    def remove!07(): Bool = region r {
+        let v = MutList.range(r, 0, 3);
         MutList.remove!(3, v);
         MutList.remove!(7, v);
         MutList.remove!(99, v);
-        MutList.sameElements(v, MutList.range(0, 3))
+        MutList.sameElements(v, MutList.range(r, 0, 3))
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
-    // append!                                                                 //
+    // pushAll!                                                                //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def append!01(): Bool & Impure =
-        let v1 = MutList.range(0, 4);
-        let v2 = MutList.range(4, 8);
-        MutList.append!(v1, v2);
-        MutList.sameElements(v1, MutList.range(0, 8))
+    def pushAll!01(): Bool = region r {
+        let v = MutList.range(r, 0, 4);
+        let l = List.range(4, 8);
+        MutList.pushAll!(l, v);
+        MutList.sameElements(v, MutList.range(r, 0, 8))
+    }
 
     @test
-    def append!02(): Bool & Impure =
-        let v1 = MutList.new();
-        let v2 = MutList.range(1, 4);
-        MutList.append!(v1, v2);
-        MutList.sameElements(v1, MutList.range(1, 4))
+    def pushAll!02(): Bool = region r {
+        let v = new MutList(r);
+        let l = List.range(1, 4);
+        MutList.pushAll!(l, v);
+        MutList.sameElements(v, MutList.range(r, 1, 4))
+    }
 
     @test
-    def append!03(): Bool & Impure =
-        let v1 = MutList.range(9, 24);
-        let v2 = MutList.new();
-        MutList.append!(v1, v2);
-        MutList.sameElements(v1, MutList.range(9, 24))
+    def pushAll!03(): Bool = region r {
+        let v = MutList.range(r, 9, 24);
+        let l = Nil: List[Int32];
+        MutList.pushAll!(l, v);
+        MutList.sameElements(v, MutList.range(r, 9, 24))
+    }
 
     @test
-    def append!04(): Bool & Impure =
-        let v1: MutList[Unit] = MutList.new();
-        let v2: MutList[Unit] = MutList.new();
-        MutList.append!(v1, v2);
-        MutList.sameElements(v1, MutList.new())
+    def pushAll!04(): Bool = region r {
+        let v: MutList[Unit, _] = new MutList(r);
+        let l: List[Unit] = Nil;
+        MutList.pushAll!(l, v);
+        MutList.sameElements(v, new MutList(r))
+    }
 
     @test
-    def append!05(): Bool & Impure =
-        let v1 = MutList.range(1, 3);
-        let v2 = MutList.range(3, 5);
-        let v3 = MutList.range(5, 99);
-        MutList.append!(v1, v2);
-        MutList.append!(v1, v3);
-        MutList.sameElements(v1, MutList.range(1, 99))
+    def pushAll!05(): Bool = region r {
+        let v = MutList.range(r, 1, 3);
+        let l1 = List.range(3, 5);
+        let l2 = List.range(5, 99);
+        MutList.pushAll!(l1, v);
+        MutList.pushAll!(l2, v);
+        MutList.sameElements(v, MutList.range(r, 1, 99))
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // retain!                                                                 //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def retain!01(): Bool & Impure =
-        let v = MutList.range(0, 10);
-        MutList.retain!(x -> x % 2 == 0, v);
-        MutList.sameElements(List.toMut(0 :: 2 :: 4 :: 6 :: 8 :: Nil), v)
+    def retain!01(): Bool = region r {
+        let l1 = MutList.range(r, 0, 10);
+        MutList.retain!(x -> x `Int32.rem` 2 == 0, l1);
+        let l2 = new MutList(r);
+        let xs = 0 :: 2 :: 4 :: 6 :: 8 :: Nil;
+        List.forEach(x -> MutList.push!(x, l2), xs);
+        MutList.sameElements(l1, l2)
+    }
 
     @test
-    def retain!02(): Bool & Impure =
-        let v = MutList.range(0, 10);
-        MutList.retain!(x -> x % 2 == 1, v);
-        MutList.sameElements(List.toMut(1 :: 3 :: 5 :: 7 :: 9 :: Nil), v)
+    def retain!02(): Bool = region r {
+        let l1 = MutList.range(r, 0, 10);
+        MutList.retain!(x -> x `Int32.rem` 2 == 1, l1);
+        let l2 = new MutList(r);
+        let xs = 1 :: 3 :: 5 :: 7 :: 9 :: Nil;
+        List.forEach(x -> MutList.push!(x, l2), xs);
+        MutList.sameElements(l1, l2)
+    }
 
     @test
-    def retain!03(): Bool & Impure =
-        let v = MutList.range(0, 10);
+    def retain!03(): Bool = region r {
+        let v = MutList.range(r, 0, 10);
         MutList.retain!(x -> x > 5, v);
-        MutList.sameElements(v, MutList.range(6, 10))
+        MutList.sameElements(v, MutList.range(r, 6, 10))
+    }
 
     @test
-    def retain!04(): Bool & Impure =
-        let v = MutList.range(0, 10);
+    def retain!04(): Bool = region r {
+        let v = MutList.range(r, 0, 10);
         MutList.retain!(x -> x > 10, v);
-        MutList.sameElements(v, MutList.new())
+        MutList.sameElements(v, new MutList(r))
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // replace!                                                                //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def replace!01(): Bool & Impure =
-        let v = MutList.new();
-        MutList.push!(1, v);
-        MutList.push!(2, v);
-        MutList.push!(2, v);
-        MutList.push!(1, v);
-        MutList.push!(1, v);
-        MutList.replace!(1, 42, v);
-        MutList.sameElements(List.toMut(42 :: 2 :: 2 :: 42 :: 42 :: Nil), v)
+    def replace!01(): Bool = region r {
+        let l1 = new MutList(r);
+        MutList.push!(1, l1);
+        MutList.push!(2, l1);
+        MutList.push!(2, l1);
+        MutList.push!(1, l1);
+        MutList.push!(1, l1);
+        MutList.replace!(from = 1, to = 42, l1);
+        let l2 = new MutList(r);
+        let xs = 42 :: 2 :: 2 :: 42 :: 42 :: Nil;
+        List.forEach(x -> MutList.push!(x, l2), xs);
+        MutList.sameElements(l1, l2)
+    }
 
     @test
-    def replace!02(): Bool & Impure =
-        let v = MutList.range(4, 7);
-        MutList.replace!(4, 0, v);
-        MutList.sameElements(List.toMut(0 :: 5 :: 6 :: Nil), v)
+    def replace!02(): Bool = region r {
+        let l1 = MutList.range(r, 4, 7);
+        MutList.replace!(from = 4, to = 0, l1);
+        let l2 = new MutList(r);
+        let xs = 0 :: 5 :: 6 :: Nil;
+        List.forEach(x -> MutList.push!(x, l2), xs);
+        MutList.sameElements(l1, l2)
+    }
 
     @test
-    def replace!03(): Bool & Impure =
-        let v = MutList.range(4, 7);
-        MutList.replace!(5, 0, v);
-        MutList.sameElements(List.toMut(4 :: 0 :: 6 :: Nil), v)
+    def replace!03(): Bool = region r {
+        let l1 = MutList.range(r, 4, 7);
+        MutList.replace!(from = 5, to = 0, l1);
+        let l2 = new MutList(r);
+        let xs = 4 :: 0 :: 6 :: Nil;
+        List.forEach(x -> MutList.push!(x, l2), xs);
+        MutList.sameElements(l1, l2)
+    }
 
     @test
-    def replace!04(): Bool & Impure =
-        let v = MutList.range(4, 7);
-        MutList.replace!(6, 0, v);
-        MutList.sameElements(List.toMut(4 :: 5 :: 0 :: Nil), v)
+    def replace!04(): Bool = region r {
+        let l1 = MutList.range(r, 4, 7);
+        MutList.replace!(from = 6, to = 0, l1);
+        let l2 = new MutList(r);
+        let xs = 4 :: 5 :: 0 :: Nil;
+        List.forEach(x -> MutList.push!(x, l2), xs);
+        MutList.sameElements(l1, l2)
+    }
 
     @test
-    def replace!05(): Bool & Impure =
-        let v = List.toMut(List.repeat('a', 97));
-        MutList.replace!('a', 'z', v);
-        MutList.sameElements(List.toMut(List.repeat('z', 97)), v)
+    def replace!05(): Bool = region r {
+        let l1 = new MutList(r);
+        let xs1 = List.repeat(97, 'a');
+        List.forEach(x -> MutList.push!(x, l1), xs1);
+        MutList.replace!(from = 'a', to = 'z', l1);
+        let l2 = new MutList(r);
+        let xs2 = List.repeat(97, 'z');
+        List.forEach(x -> MutList.push!(x, l2), xs2);
+        MutList.sameElements(l1, l2)
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // reverse!                                                                //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def reverse01!(): Bool & Impure =
-        let v: MutList[Unit] = MutList.new();
+    def reverse01!(): Bool = region r {
+        let v: MutList[Unit, _] = new MutList(r);
         MutList.reverse!(v);
-        MutList.sameElements(v, MutList.new())
+        MutList.sameElements(v, new MutList(r))
+    }
 
     @test
-    def reverse02!(): Bool & Impure =
-        let v = MutList.range(0, 1);
+    def reverse02!(): Bool = region r {
+        let v = MutList.range(r, 0, 1);
         MutList.reverse!(v);
-        MutList.sameElements(v, MutList.range(0, 1))
+        MutList.sameElements(v, MutList.range(r, 0, 1))
+    }
 
     @test
-    def reverse03!(): Bool & Impure =
-        let v = MutList.range(0, 5);
-        MutList.reverse!(v);
-        MutList.sameElements(v, List.toMut(4 :: 3 :: 2 :: 1 :: 0 :: Nil))
+    def reverse03!(): Bool = region r {
+        let l1 = MutList.range(r, 0, 5);
+        MutList.reverse!(l1);
+        let l2 = new MutList(r);
+        let xs = 4 :: 3 :: 2 :: 1 :: 0 :: Nil;
+        List.forEach(x -> MutList.push!(x, l2), xs);
+        MutList.sameElements(l1, l2)
+    }
 
     @test
-    def reverse04!(): Bool & Impure =
-        let v = MutList.range(0, 6);
-        MutList.reverse!(v);
-        MutList.sameElements(v, List.toMut(5 :: 4 :: 3 :: 2 :: 1 :: 0 :: Nil))
+    def reverse04!(): Bool = region r {
+        let l1 = MutList.range(r, 0, 6);
+        MutList.reverse!(l1);
+        let l2 = new MutList(r);
+        let xs = 5 :: 4 :: 3 :: 2 :: 1 :: 0 :: Nil;
+        List.forEach(x -> MutList.push!(x, l2), xs);
+        MutList.sameElements(l1, l2)
+    }
 
     @test
-    def reverse05!(): Bool & Impure =
-        let v = List.toMut(7 :: 6 :: 5 :: 4 :: 3 :: 2 :: Nil);
-        MutList.reverse!(v);
-        MutList.sameElements(v, MutList.range(2, 8))
+    def reverse05!(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 7 :: 6 :: 5 :: 4 :: 3 :: 2 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.reverse!(l);
+        MutList.sameElements(l, MutList.range(r, 2, 8))
+    }
 
-    /////////////////////////////////////////////////////////////////////////////
-    // shrinkTo!                                                               //
-    /////////////////////////////////////////////////////////////////////////////
-
-    @test
-    def shrinkTo!01(): Bool & Impure =
-        let v = MutList.new();
-        let c = MutList.capacity(v);
-        MutList.shrinkTo!(0, v);
-        c == MutList.capacity(v) and MutList.length(v) == 0
-
-    @test
-    def shrinkTo!02(): Bool & Impure =
-        let v = MutList.range(0, 99);
-        let c1 = MutList.capacity(v);
-        MutList.shrinkTo!(90, v);
-        let c2 = MutList.capacity(v);
-        MutList.shrinkTo!(2, v);
-        let c3 = MutList.capacity(v);
-        MutList.shrinkTo!(1, v);
-        let c4 = MutList.capacity(v);
-        MutList.shrinkTo!(0, v);
-        c1 == 99 and c2 == 90 and c3 == 2 and c4 == 1 and MutList.capacity(v) == 0 and MutList.length(v) == 0
-
-    @test
-    def shrinkTo!03(): Bool & Impure =
-        let v = MutList.new();
-        MutList.push!(3, v);
-        MutList.push!(4, v);
-        MutList.push!(5, v);
-        MutList.push!(6, v);
-        MutList.push!(7, v);
-        MutList.shrinkTo!(4, v);
-        let c1 = MutList.capacity(v);
-        MutList.shrinkTo!(2, v);
-        let c2 = MutList.capacity(v);
-        MutList.shrinkTo!(0, v);
-        c1 == 4 and c2 == 2 and MutList.capacity(v) == 0 and MutList.length(v) == 0
-
-    @test
-    def shrinkTo!04(): Bool & Impure =
-        let v = MutList.range(0, 10);
-        MutList.shrinkTo!(11, v);
-        let c = MutList.capacity(v);
-        MutList.shrinkTo!(10, v);
-        c == 10 and MutList.capacity(v) == 10 and MutList.length(v) == 10
-
-    @test
-    def shrinkTo!05(): Bool & Impure =
-        let v = MutList.range(0, 10);
-        MutList.shrinkTo!(1, v);
-        MutList.capacity(v) == 1 and MutList.length(v) == 1
-
-    @test
-    def shrinkTo!06(): Bool & Impure =
-        let v = MutList.range(0, 4);
-        MutList.push!(42, v);
-        MutList.insert!(99, 3, v);
-        MutList.shrinkTo!(3, v);
-        MutList.capacity(v) == 3 and MutList.length(v) == 3
 
     /////////////////////////////////////////////////////////////////////////////
     // shrink!                                                                 //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def shrink!01(): Bool & Impure =
-        let v = MutList.new();
-        let c = MutList.capacity(v);
+    def shrink!01(): Bool = region r {
+        let v = new MutList(r);
         MutList.push!(0, v);
         MutList.push!(1, v);
         MutList.push!(2, v);
         MutList.shrink!(v);
-        c == 0 and MutList.capacity(v) == 3 and MutList.length(v) == 3
+        MutList.length(v) == 3
+    }
 
     @test
-    def shrink!02(): Bool & Impure =
-        let v = MutList.new();
-        let c = MutList.capacity(v);
+    def shrink!02(): Bool = region r {
+        let v = new MutList(r);
         MutList.shrink!(v);
-        c == 0 and MutList.capacity(v) == 0 and MutList.length(v) == 0
+        MutList.length(v) == 0
+    }
 
     @test
-    def shrink!03(): Bool & Impure =
-        let v = MutList.range(0, 9);
-        let c = MutList.capacity(v);
+    def shrink!03(): Bool = region r {
+        let v = MutList.range(r, 0, 9);
         MutList.push!(9, v);
         MutList.shrink!(v);
-        c == 9 and MutList.capacity(v) == 10 and MutList.length(v) == 10
+        MutList.length(v) == 10
+    }
 
     @test
-    def shrink!04(): Bool & Impure =
-        let v = MutList.new();
-        let c = MutList.capacity(v);
+    def shrink!04(): Bool = region r {
+        let v = new MutList(r);
         MutList.push!(4, v);
-        MutList.append!(v, MutList.range(0, 4));
+        MutList.append!(MutList.toList(MutList.range(r, 0, 4)), v);
         MutList.push!(5, v);
         MutList.shrink!(v);
-        c == 0 and MutList.capacity(v) == 6 and MutList.length(v) == 6
+        MutList.length(v) == 6
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // truncate!                                                               //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def truncate!01(): Bool & Impure =
-        let v: MutList[Unit] = MutList.new();
+    def truncate!01(): Bool = region r {
+        let v: MutList[Unit, _] = new MutList(r);
         MutList.truncate!(0, v);
-        MutList.sameElements(v, MutList.new())
+        MutList.sameElements(v, new MutList(r))
+    }
 
     @test
-    def truncate!02(): Bool & Impure =
-        let v = MutList.range(0, 10);
+    def truncate!02(): Bool = region r {
+        let v = MutList.range(r, 0, 10);
         MutList.truncate!(5, v);
-        MutList.sameElements(v, MutList.range(0, 5))
+        MutList.sameElements(v, MutList.range(r, 0, 5))
+    }
 
     @test
-    def truncate!03(): Bool & Impure =
-        let v = MutList.range(0, 99);
+    def truncate!03(): Bool = region r {
+        let v = MutList.range(r, 0, 99);
         MutList.truncate!(-1, v);
-        MutList.sameElements(v, MutList.new())
+        MutList.sameElements(v, new MutList(r))
+    }
 
     @test
-    def truncate!04(): Bool & Impure =
-        let v = MutList.range(7, 8);
+    def truncate!04(): Bool = region r {
+        let v = MutList.range(r, 7, 8);
         MutList.truncate!(2, v);
-        MutList.sameElements(v, MutList.range(7, 8))
+        MutList.sameElements(v, MutList.range(r, 7, 8))
+    }
 
     @test
-    def truncate!05(): Bool & Impure =
-        let v = MutList.range(99, 102);
+    def truncate!05(): Bool = region r {
+        let v = MutList.range(r, 99, 102);
         MutList.truncate!(1, v);
-        MutList.sameElements(v, MutList.range(99, 100))
+        MutList.sameElements(v, MutList.range(r, 99, 100))
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // reserve!                                                                //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def reserve!01(): Bool & Impure =
-        let v = MutList.new();
+    def reserve!01(): Bool = region r {
+        let v = new MutList(r);
         MutList.reserve!(4, v);
-        MutList.capacity(v) == 4
+        capacity(v) - MutList.length(v) >= 4
+    }
 
     @test
-    def reserve!02(): Bool & Impure =
-        let v = MutList.range(0, 5);
+    def reserve!02(): Bool = region r {
+        let v = MutList.range(r, 0, 5);
         MutList.reserve!(5, v);
-        MutList.capacity(v) == 10
+        capacity(v) - MutList.length(v) >= 5
+    }
 
     @test
-    def reserve!03(): Bool & Impure =
-        let v = MutList.range(0, 99);
+    def reserve!03(): Bool = region r {
+        let v = MutList.range(r, 0, 99);
         MutList.reserve!(1, v);
-        MutList.capacity(v) == 100
+        capacity(v) - MutList.length(v) >= 1
+    }
 
     @test
-    def reserve!04(): Bool & Impure =
-        let v = MutList.range(0, 100);
+    def reserve!04(): Bool = region r {
+        let v = MutList.range(r, 0, 100);
         MutList.reserve!(100, v);
-        MutList.capacity(v) == 200
+        capacity(v) - MutList.length(v) >= 100
+    }
 
     @test
-    def reserve!05(): Bool & Impure =
-        let n = 5;
-        let v = MutList.range(0, n);
+    def reserve!05(): Bool = region r {
+        let v = MutList.range(r, 0, 5);
         MutList.reserve!(MutList.length(v), v);
-        MutList.capacity(v) == 2 * n
+        capacity(v) - MutList.length(v) >= MutList.length(v)
+    }
 
     @test
-    def reserve!06(): Bool & Impure =
+    def reserve!06(): Bool = region r {
         let n = 197;
-        let v = MutList.range(0, n);
+        let v = MutList.range(r, 0, n);
         MutList.reserve!(1, v);
         MutList.reserve!(1, v);
         MutList.reserve!(1, v);
         MutList.reserve!(1, v);
         MutList.reserve!(1, v);
-        MutList.capacity(v) == n + 1
+        capacity(v) - MutList.length(v) >= 1
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
-    // formatWith                                                              //
-    /////////////////////////////////////////////////////////////////////////////
-
-    @test
-    def formatWith01(): Bool & Impure =
-        let v = MutList.range(0, 5);
-        MutList.formatWith(Int32.toString, ", ", v) == "0, 1, 2, 3, 4"
-
-    @test
-    def formatWith02(): Bool & Impure =
-        let v = MutList.range(1, 4);
-        MutList.formatWith(Int32.toString, "+", v) == "1+2+3"
-
-    @test
-    def formatWith03(): Bool & Impure =
-        let v = MutList.range(2, 3);
-        MutList.formatWith(Int32.toString, "/", v) == "2"
-
-    @test
-    def formatWith04(): Bool & Impure =
-        let v = MutList.range(6, 9);
-        MutList.formatWith(Int32.toString, "/", v) == "6/7/8"
-
-    /////////////////////////////////////////////////////////////////////////////
-    // foreach                                                                 //
+    // iterator                                                                //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def foreach01(): Bool & Impure =
-        let v = MutList.new();
-        let sb = StringBuilder.new();
-        let f = x -> if (x > 0) StringBuilder.appendChar!(sb, 'T') else StringBuilder.appendChar!(sb, 'F');
-        MutList.foreach(f, v);
+    def iterator01(): Bool = region r {
+        let l = new MutList(r): MutList[Int32, r];
+        let iter = MutList.iterator(r, l);
+        match Iterator.next(iter) {
+            case None => true
+            case _    => false
+        }
+    }
+
+    @test
+    def iterator02(): Bool = region r {
+        let l = List.toMutList(r, 1 :: 2 :: 3 :: Nil);
+        let iter = MutList.iterator(r, l);
+        match Iterator.next(iter) {
+            case Some(_) => true
+            case _       => false
+        }
+    }
+
+    @test
+    def iterator03(): Bool = region r {
+        let l = List.toMutList(r, 1 :: 2 :: 3 :: Nil);
+        discard MutList.pop!(l);
+        discard MutList.pop!(l);
+        discard MutList.pop!(l);
+        let iter = MutList.iterator(r, l);
+        match Iterator.next(iter) {
+            case None => true
+            case _    => false
+        }
+    }
+
+    @test
+    def iterator04(): Bool = region r {
+        let l = List.toMutList(r, 1 :: 2 :: 3 :: Nil);
+        MutList.iterator(r, l) |> Iterator.toList == 1 :: 2 :: 3 :: Nil
+    }
+
+    @test
+    def iterator05(): Bool = region r {
+        let l = MutList.range(r, 0, 100);
+        MutList.iterator(r, l) |> Iterator.toList == List.range(0, 100) and
+        MutList.toList(l) == List.range(0, 100)
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // forEach                                                                 //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def forEach01(): Bool = region r {
+        let v = new MutList(r);
+        let sb = new StringBuilder(r);
+        let f = x -> if (x > 0) StringBuilder.append!('T', sb) else StringBuilder.append!('F', sb);
+        MutList.forEach(f, v);
         StringBuilder.toString(sb) == ""
+    }
 
     @test
-    def foreach02(): Bool & Impure =
-        let v = MutList.range(0, 5);
-        let sb = StringBuilder.new();
-        let f = x -> if (x % 2 == 0) StringBuilder.appendChar!(sb, 'T') else StringBuilder.appendChar!(sb, 'F');
-        MutList.foreach(f, v);
+    def forEach02(): Bool = region r {
+        let v = MutList.range(r, 0, 5);
+        let sb = new StringBuilder(r);
+        let f = x -> if (x `Int32.rem` 2 == 0) StringBuilder.append!('T', sb) else StringBuilder.append!('F', sb);
+        MutList.forEach(f, v);
         StringBuilder.toString(sb) == "TFTFT"
+    }
 
     @test
-    def foreach03(): Bool & Impure =
-        let v = MutList.range(0, 2);
-        let sb = StringBuilder.new();
-        let f = x -> if (x > 0) StringBuilder.appendChar!(sb, 'T') else StringBuilder.appendChar!(sb, 'F');
-        MutList.foreach(f, v);
+    def forEach03(): Bool = region r {
+        let v = MutList.range(r, 0, 2);
+        let sb = new StringBuilder(r);
+        let f = x -> if (x > 0) StringBuilder.append!('T', sb) else StringBuilder.append!('F', sb);
+        MutList.forEach(f, v);
         StringBuilder.toString(sb) == "FT"
+    }
 
     @test
-    def foreach04(): Bool & Impure =
-        let v = MutList.range(0, 2);
-        let sb = StringBuilder.new();
-        let f = x -> if (x < 0) StringBuilder.appendChar!(sb, 'T') else StringBuilder.appendChar!(sb, 'F');
-        MutList.foreach(f, v);
+    def forEach04(): Bool = region r {
+        let v = MutList.range(r, 0, 2);
+        let sb = new StringBuilder(r);
+        let f = x -> if (x < 0) StringBuilder.append!('T', sb) else StringBuilder.append!('F', sb);
+        MutList.forEach(f, v);
         StringBuilder.toString(sb) == "FF"
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
-    // foreachWithIndex                                                        //
+    // forEachWithIndex                                                        //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def foreachWithIndex01(): Bool & Impure =
-        let v1 = MutList.range(0, 100);
-        let v2 = MutList.new();
-        MutList.foreachWithIndex((x, i) -> if (x % 2 == 0 and i < 10) MutList.push!(x, v2) else (), v1);
-        MutList.sameElements(v2, List.toMut(0 :: 2 :: 4 :: 6 :: 8 :: Nil))
+    def forEachWithIndex01(): Bool = region r {
+        let v1 = MutList.range(r, 0, 100);
+        let v2 = new MutList(r);
+        MutList.forEachWithIndex((i, x) -> if (x `Int32.rem` 2 == 0 and i < 10) MutList.push!(x, v2) else (), v1);
+        let l = new MutList(r);
+        let xs = 0 :: 2 :: 4 :: 6 :: 8 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.sameElements(v2, l)
+    }
 
     @test
-    def foreachWithIndex02(): Bool & Impure =
-        let v = MutList.range(1, 4);
-        let sb = StringBuilder.new();
-        let f = (x, i) -> if (x % 2 == 1 and i == 0) StringBuilder.appendChar!(sb, 'T') else StringBuilder.appendChar!(sb, 'F');
-        MutList.foreachWithIndex(f, v);
+    def forEachWithIndex02(): Bool = region r {
+        let v = MutList.range(r, 1, 4);
+        let sb = new StringBuilder(r);
+        let f = (i, x) -> if (x `Int32.rem` 2 == 1 and i == 0) StringBuilder.append!('T', sb) else StringBuilder.append!('F', sb);
+        MutList.forEachWithIndex(f, v);
         StringBuilder.toString(sb) == "TFF"
+    }
 
     @test
-    def foreachWithIndex03(): Bool & Impure =
-        let v = MutList.range(0, 5);
-        let sb = StringBuilder.new();
-        let f = (x, _) -> if (x % 2 == 0) StringBuilder.appendChar!(sb, 'T') else StringBuilder.appendChar!(sb, 'F');
-        MutList.foreachWithIndex(f, v);
+    def forEachWithIndex03(): Bool = region r {
+        let v = MutList.range(r, 0, 5);
+        let sb = new StringBuilder(r);
+        let f = (_, x) -> if (x `Int32.rem` 2 == 0) StringBuilder.append!('T', sb) else StringBuilder.append!('F', sb);
+        MutList.forEachWithIndex(f, v);
         StringBuilder.toString(sb) == "TFTFT"
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // compress!                                                               //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def compress!01(): Bool & Impure =
-        let v = MutList.range(0, 100);
-        List.foreach(_ -> let _ = MutList.pop!(v); (), List.range(0, 75));
-        let c = MutList.capacity(v);
-        let _ = MutList.pop!(v);
-        c == 100 and MutList.capacity(v) == 50
+    def compress!01(): Bool = region r {
+        // Pop 76 element such that the load factor is strictly lower than 1 / 4.
+        let v = MutList.range(r, 0, 100);
+        let c = capacity(v);
+        let i = ref 0 @ r;
+        let f = _ -> {
+            if (deref i < 76) {
+                discard MutList.pop!(v);
+                i := deref i + 1
+            }
+            else ()
+        };
+        MutList.forEach(f, v);
+        capacity(v) == c / 2 and
+            MutList.length(v) == 100 - 75 - 1
+    }
 
     @test
-    def compress!02(): Bool & Impure =
-        let v = MutList.new();
+    def compress!02(): Bool = region r {
+        let v = new MutList(r);
         MutList.compress!(v);
-        MutList.capacity(v) == 0
+        capacity(v) == capacity(new MutList(r))
+    }
 
     @test
-    def compress!03(): Bool & Impure =
-        let v = MutList.new();
+    def compress!03(): Bool = region r {
+        let v = new MutList(r);
+        let c = capacity(v);
         MutList.push!(42, v);
         MutList.compress!(v);
-        MutList.capacity(v) == 1
+        capacity(v) <= c and
+        MutList.length(v) == 1
+    }
 
     @test
-    def compress!04(): Bool & Impure =
-        let v = MutList.range(0, 5);
+    def compress!04(): Bool = region r {
+        let v = MutList.range(r, 0, 5);
         MutList.compress!(v);
-        MutList.capacity(v) == 5
+        capacity(v) <= capacity(MutList.range(r, 0, 5))
+    }
 
-    @test
-    def compress!05(): Bool & Impure =
-        let v = MutList.range(0, 8);
-        MutList.push!(99, v);
-        MutList.remove!(0, v);
-        MutList.remove!(0, v);
-        MutList.remove!(0, v);
-        MutList.remove!(0, v);
-        MutList.remove!(0, v);
-        let c = MutList.capacity(v);
-        MutList.remove!(0, v);
-        c == 16 and MutList.capacity(v) == 8
-
-    @test
-    def compress!06(): Bool & Impure =
-        let v = MutList.range(0, 8);
-        MutList.push!(7, v);
-        let _ = MutList.pop!(v);
-        let _ = MutList.pop!(v);
-        let _ = MutList.pop!(v);
-        let _ = MutList.pop!(v);
-        let _ = MutList.pop!(v);
-        let c = MutList.capacity(v);
-        let _ = MutList.pop!(v);
-        c == 16 and MutList.capacity(v) == 8
-
-    /////////////////////////////////////////////////////////////////////////////
-    // capacity                                                                //
-    /////////////////////////////////////////////////////////////////////////////
-
-    @test
-    def capacity01(): Bool & Impure =
-        let v = MutList.new();
-        MutList.capacity(v) == 0
-
-    @test
-    def capacity02(): Bool & Impure =
-        let v = MutList.range(0, 9);
-        MutList.capacity(v) == 9
-
-    @test
-    def capacity03(): Bool & Impure =
-        let v = MutList.new();
-        MutList.push!(0, v);
-        MutList.push!(1, v);
-        MutList.push!(2, v);
-        MutList.push!(3, v);
-        MutList.capacity(v) == 4
-
-    @test
-    def capacity04(): Bool & Impure =
-        let v = MutList.new();
-        MutList.push!(42, v);
-        MutList.insert!(41, 0, v);
-        MutList.insert!(40, 0, v);
-        MutList.insert!(39, 0, v);
-        MutList.capacity(v) == 4
-
-    @test
-    def capacity05(): Bool & Impure =
-        let v = MutList.new();
-        MutList.push!(99, v);
-        MutList.capacity(v) == 1
-
-    @test
-    def capacity06(): Bool & Impure =
-        let v = MutList.new();
-        MutList.insert!(42, 0, v);
-        MutList.capacity(v) == 1
-
-    @test
-    def capacity07(): Bool & Impure =
-        let v = MutList.new();
-        MutList.insert!(5, 0, v);
-        MutList.insert!(4, 0, v);
-        MutList.insert!(3, 0, v);
-        MutList.insert!(2, 0, v);
-        MutList.insert!(1, 0, v);
-        MutList.capacity(v) == 8
-
-    /////////////////////////////////////////////////////////////////////////////
-    // toString                                                                //
-    /////////////////////////////////////////////////////////////////////////////
-
-    @test
-    def toString01(): Bool & Impure =
-        let v = MutList.new();
-        MutList.push!(1, v);
-        toString(v) == "MutList#{1}"
-
-    @test
-    def toString02(): Bool & Impure =
-        let v = MutList.new();
-        MutList.push!(1, v);
-        MutList.push!(97, v);
-        toString(v) == "MutList#{1, 97}"
-
-    @test
-    def toString03(): Bool & Impure =
-        let v = MutList.new();
-        MutList.push!(1, v);
-        MutList.push!(97, v);
-        MutList.push!(0, v);
-        toString(v) == "MutList#{1, 97, 0}"
-
-    @test
-    def toString04(): Bool & Impure =
-        let v = MutList.new();
-        MutList.push!('a', v);
-        MutList.push!('b', v);
-        MutList.push!('c', v);
-        MutList.push!('d', v);
-        toString(v) == "MutList#{a, b, c, d}"
 
     /////////////////////////////////////////////////////////////////////////////
     // minimumBy                                                               //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def minimumBy01(): Bool & Impure = MutList.minimumBy((x, y) -> x <=> y, MutList.new(): MutList[Int32]) == None
+    def minimumBy01(): Bool = region r {
+        MutList.minimumBy((x, y) -> x <=> y, new MutList(r): MutList[Int32, _]) == None
+    }
 
     @test
-    def minimumBy02(): Bool & Impure = MutList.minimumBy((x, y) -> x <=> y, MutList.range(0, 5)) == Some(0)
+    def minimumBy02(): Bool = region r {
+        MutList.minimumBy((x, y) -> x <=> y, MutList.range(r, 0, 5)) == Some(0)
+    }
 
     @test
-    def minimumBy03(): Bool & Impure = MutList.minimumBy((x, y) -> x <=> y, MutList.range(5, 10)) == Some(5)
+    def minimumBy03(): Bool = region r {
+        MutList.minimumBy((x, y) -> x <=> y, MutList.range(r, 5, 10)) == Some(5)
+    }
 
     @test
-    def minimumBy04(): Bool & Impure =
-        let v = MutList.range(0, 6);
+    def minimumBy04(): Bool = region r {
+        let v = MutList.range(r, 0, 6);
         MutList.push!(-2, v);
         MutList.minimumBy((x, y) -> x <=> y, v) == Some(-2)
+    }
 
     @test
-    def minimumBy05(): Bool & Impure =
-        let v = MutList.range(9, 19);
-        let cmp = (x, y) -> if (x < y and x % 2 == 0) LessThan else GreaterThan;
+    def minimumBy05(): Bool = region r {
+        let v = MutList.range(r, 9, 19);
+        let cmp = (x, y) -> if (x < y and x `Int32.rem` 2 == 0) Comparison.LessThan else Comparison.GreaterThan;
         MutList.minimumBy(cmp, v) == Some(10)
+    }
+
 
     /////////////////////////////////////////////////////////////////////////////
     // maximumBy                                                               //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def maximumBy01(): Bool & Impure = MutList.maximumBy((x, y) -> x <=> y, MutList.new(): MutList[Int32]) == None
+    def maximumBy01(): Bool = region r {
+        MutList.maximumBy((x, y) -> x <=> y, new MutList(r): MutList[Int32, _]) == None
+    }
 
     @test
-    def maximumBy02(): Bool & Impure = MutList.maximumBy((x, y) -> x <=> y, MutList.range(0, 5)) == Some(4)
+    def maximumBy02(): Bool = region r {
+        MutList.maximumBy((x, y) -> x <=> y, MutList.range(r, 0, 5)) == Some(4)
+    }
 
     @test
-    def maximumBy03(): Bool & Impure = MutList.maximumBy((x, y) -> x <=> y, MutList.range(5, 10)) == Some(9)
+    def maximumBy03(): Bool = region r {
+        MutList.maximumBy((x, y) -> x <=> y, MutList.range(r, 5, 10)) == Some(9)
+    }
 
     @test
-    def maximumBy04(): Bool & Impure =
-        let v = MutList.range(0, 6);
+    def maximumBy04(): Bool = region r {
+        let v = MutList.range(r, 0, 6);
         MutList.push!(11, v);
         MutList.maximumBy((x, y) -> x <=> y, v) == Some(11)
+    }
 
     @test
-    def maximumBy05(): Bool & Impure =
-        let v = MutList.range(9, 19);
-        let cmp = (x, y) -> if (x > y and x % 2 == 0) GreaterThan else LessThan;
+    def maximumBy05(): Bool = region r {
+        let v = MutList.range(r, 9, 19);
+        let cmp = (x, y) -> if (x > y and x `Int32.rem` 2 == 0) Comparison.GreaterThan else Comparison.LessThan;
         MutList.maximumBy(cmp, v) == Some(18)
+    }
 
     /////////////////////////////////////////////////////////////////////////////
     // toArray                                                                 //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def toArray01(): Bool & Impure =
-        Array.sameElements(MutList.toArray(Array.toMutList([1, 2, 3])), [1, 2, 3])
+    def toArray01(): Bool = region r {
+        Array.sameElements(MutList.toArray(r, Array.toMutList(r, Array#{1, 2, 3} @ r)), Array#{1, 2, 3} @ r)
+    }
 
     @test
-    def toArray02(): Bool & Impure =
-        let v = Array.toMutList([1, 2, 3]);
-        let a = MutList.toArray(v);
+    def toArray02(): Bool = region r {
+        let v = Array.toMutList(r, Array#{1, 2, 3} @ r);
+        let a = MutList.toArray(r, v);
         a[1] = 42;
-        MutList.get(1, v) == 2
+        MutList.nth(1, v) == Some(2)
+    }
 
     @test
-    def toArray03(): Bool & Impure =
-        let v = Array.toMutList([1, 2, 3]);
-        MutList.pop!(v);
-        MutList.pop!(v);
-        Array.length(MutList.toArray(v)) == 1
+    def toArray03(): Bool = region r {
+        let v = Array.toMutList(r, Array#{1, 2, 3} @ r);
+        discard MutList.pop!(v);
+        discard MutList.pop!(v);
+        Array.length(MutList.toArray(r, v)) == 1
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // toVector                                                                //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def toVector01(): Bool = region rc {
+        MutList.toVector(MutList.new(rc) : MutList[Int32, _]) `Vector.equals` Vector.empty()
+    }
+
+    @test
+    def toVector02(): Bool = region rc {
+        let l = MutList.new(rc);
+        MutList.push!(0, l);
+        MutList.toVector(l) `Vector.equals` Vector.singleton(0)
+    }
+
+    @test
+    def toVector03(): Bool = region rc {
+        let l = MutList.new(rc);
+        MutList.push!(1, l);
+        MutList.push!(2, l);
+        MutList.push!(3, l);
+        MutList.toVector(l) `Vector.equals` List.toVector(1 :: 2 :: 3 :: Nil)
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // toList                                                                  //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def toList01(): Bool = region r {
+        new MutList(r): MutList[Int32, _] |> MutList.toList == Nil: List[Int32]
+    }
+
+    @test
+    def toList02(): Bool = region r {
+        let ml = MutList.range(r, 0, 1000);
+        ml |> MutList.toList == List.range(0, 1000) and
+            not (MutList.isEmpty(ml))
+    }
+
+    @test
+    def toList03(): Bool = region r {
+        let ml = MutList.range(r, 0, 1000);
+        ml |> MutList.toList == List.range(0, 1000) and
+           ml `sameElements` MutList.range(r, 0, 1000)
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // toChain                                                                 //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def toChain01(): Bool = region r {
+        let l = new MutList(r);
+        let xs: List[Int32] = Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.toChain(l) == Chain.empty()
+    }
+
+    @test
+    def toChain02(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.toChain(l) == Chain.singleton(1)
+    }
+
+    @test
+    def toChain03(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: 2 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.toChain(l) == List.toChain(1 :: 2 :: Nil)
+    }
+
+    @test
+    def toChain04(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: 2 :: 3 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.toChain(l) == List.toChain(1 :: 2 :: 3 :: Nil)
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // toMutDeque                                                              //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def toMutDeque01(): Bool = region r {
+        let l = new MutList(r): MutList[Int32, _];
+        let d = new MutDeque(r): MutDeque[Int32, _];
+
+        MutList.toMutDeque(r, l) `MutDeque.sameElements` d
+    }
+
+    @test
+    def toMutDeque02(): Bool = region r {
+        let xs = 1 :: Nil;
+
+        let l = new MutList(r);
+        List.forEach(x -> MutList.push!(x, l), xs);
+
+        let d = new MutDeque(r);
+        List.forEach(x -> MutDeque.pushBack(x, d), xs);
+
+        MutList.toMutDeque(r, l) `MutDeque.sameElements` d
+    }
+
+    @test
+    def toMutDeque03(): Bool = region r {
+        let xs = 1 :: 2 :: Nil;
+
+        let l = new MutList(r);
+        List.forEach(x -> MutList.push!(x, l), xs);
+
+        let d = new MutDeque(r);
+        List.forEach(x -> MutDeque.pushBack(x, d), xs);
+
+        MutList.toMutDeque(r, l) `MutDeque.sameElements` d
+    }
+
+    @test
+    def toMutDeque04(): Bool = region r {
+        let xs = 1 :: 2 :: 3 :: Nil;
+
+        let l = new MutList(r);
+        List.forEach(x -> MutList.push!(x, l), xs);
+
+        let d = new MutDeque(r);
+        List.forEach(x -> MutDeque.pushBack(x, d), xs);
+
+        MutList.toMutDeque(r, l) `MutDeque.sameElements` d
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // The following tests for sort functions correspond to those in TestArray //
+    /////////////////////////////////////////////////////////////////////////////
+    // sortWith                                                                //
+    /////////////////////////////////////////////////////////////////////////////
+
+    def cmp(x: Int32, y: Int32): Comparison =
+        if (x < y) Comparison.LessThan
+        else if (x == y) Comparison.EqualTo
+        else Comparison.GreaterThan
+
+    @test
+    def sortWith01(): Bool = region r {
+        let a = MutList.sortWith(r, cmp, Array.toMutList(r, (Array#{} @ r): Array[Int32, r]));
+        a `sameElements` Array.toMutList(r, Array#{} @ r)
+    }
+
+    @test
+    def sortWith02(): Bool = region r {
+        let a = MutList.sortWith(r, cmp, Array.toMutList(r, Array#{0} @ r));
+        a `sameElements` Array.toMutList(r, Array#{0} @ r)
+    }
+
+    @test
+    def sortWith03(): Bool = region r {
+        let a = MutList.sortWith(r, cmp, Array.toMutList(r, Array#{0, 1} @ r));
+        a `sameElements` Array.toMutList(r, Array#{0,1} @ r)
+    }
+
+    @test
+    def sortWith04(): Bool = region r {
+        let a = MutList.sortWith(r, cmp, Array.toMutList(r, Array#{1,0} @ r));
+        a `sameElements` Array.toMutList(r, Array#{0,1} @ r)
+    }
+
+    @test
+    def sortWith05(): Bool = region r {
+        let a = MutList.sortWith(r, cmp, Array.toMutList(r, Array#{1,1} @ r));
+        a `sameElements` Array.toMutList(r, Array#{1,1} @ r)
+    }
+
+    @test
+    def sortWith06(): Bool = region r {
+        let a = MutList.sortWith(r, cmp, Array.toMutList(r, Array#{0,1,2,3,4,5} @ r));
+        a `sameElements` Array.toMutList(r, Array#{0,1,2,3,4,5} @ r)
+    }
+
+    @test
+    def sortWith07(): Bool = region r {
+        let a = MutList.sortWith(r, cmp, Array.toMutList(r, Array#{5,4,3,2,1,0} @ r));
+        a `sameElements` Array.toMutList(r, Array#{0,1,2,3,4,5} @ r)
+    }
+
+    @test
+    def sortWith08(): Bool = region r {
+        let a = MutList.sortWith(r, cmp, Array.toMutList(r, Array#{5,3,0,4,1,2} @ r));
+        a `sameElements` Array.toMutList(r, Array#{0,1,2,3,4,5} @ r)
+    }
+
+    @test
+    def sortWith09(): Bool = region r {
+        let a = MutList.sortWith(r, cmp, Array.toMutList(r, Array#{2,3,0,4,1,2} @ r));
+        a `sameElements` Array.toMutList(r, Array#{0,1,2,2,3,4} @ r)
+    }
+
+    @test
+    def sortWith10(): Bool = region r {
+        let a = MutList.sortWith(r, flip(cmp), Array.toMutList(r, Array#{0,1,2,3,4,5} @ r));
+        a `sameElements` Array.toMutList(r, Array#{5,4,3,2,1,0} @ r)
+    }
+
+    @test
+    def sortWith11(): Bool = region r {
+        let a = MutList.sortWith(r, flip(cmp), Array.toMutList(r, Array#{5,4,3,2,1,0} @ r));
+        a `sameElements` Array.toMutList(r, Array#{5,4,3,2,1,0} @ r)
+    }
+
+    @test
+    def sortWith12(): Bool = region r {
+        let a = MutList.sortWith(r, flip(cmp), Array.toMutList(r, Array#{5,3,0,4,1,2} @ r));
+        a `sameElements` Array.toMutList(r, Array#{5,4,3,2,1,0} @ r)
+    }
+
+
+    @test
+    def sortWith13(): Bool = region r {
+        let a = MutList.sortWith(r, flip(cmp), Array.toMutList(r, Array#{2,3,0,4,1,2} @ r));
+        a `sameElements` Array.toMutList(r, Array#{4,3,2,2,1,0} @ r)
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // sort                                                                    //
+    /////////////////////////////////////////////////////////////////////////////
+
+    def testSortVsSortWith(a: MutList[Int32, r]): Bool \ { Read(r) } = region r1 {
+        MutList.sort(r1, a) `sameElements` MutList.sortWith(r1, cmp, a)
+    }
+
+    @test
+    def sort01(): Bool = region r {
+        testSortVsSortWith(Array.toMutList(r, (Array#{} @ r): Array[Int32, r]))
+    }
+
+    @test
+    def sort02(): Bool = region r {
+        testSortVsSortWith(Array.toMutList(r, Array#{0} @ r))
+    }
+
+    @test
+    def sort03(): Bool = region r {
+        testSortVsSortWith(Array.toMutList(r, Array#{0,1} @ r))
+    }
+
+    @test
+    def sort04(): Bool = region r {
+        testSortVsSortWith(Array.toMutList(r, Array#{1,0} @ r))
+    }
+
+    @test
+    def sort05(): Bool = region r {
+        testSortVsSortWith(Array.toMutList(r, Array#{1,1} @ r))
+    }
+
+    @test
+    def sort06(): Bool = region r {
+        testSortVsSortWith(Array.toMutList(r, Array#{0,1,2,3,4,5} @ r))
+    }
+
+    @test
+    def sort07(): Bool = region r {
+        testSortVsSortWith(Array.toMutList(r, Array#{5,4,3,2,1,0} @ r))
+    }
+
+    @test
+    def sort08(): Bool = region r {
+        testSortVsSortWith(Array.toMutList(r, Array#{5,3,0,4,1,2} @ r))
+    }
+
+    @test
+    def sort09(): Bool = region r {
+        testSortVsSortWith(Array.toMutList(r, Array#{2,3,0,4,1,2} @ r))
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // sortWith!                                                               //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def sortWith01!(): Bool = region r {
+        let a = Array.toMutList(r, (Array#{} @ r): Array[Int32, r]);
+        MutList.sortWith!(cmp, a);
+        a `sameElements` Array.toMutList(r, (Array#{} @ r): Array[Int32, r])
+    }
+
+    @test
+    def sortWith02!(): Bool = region r {
+        let a = Array.toMutList(r, Array#{0} @ r);
+        MutList.sortWith!(cmp, a);
+        a `sameElements` Array.toMutList(r, Array#{0} @ r)
+    }
+
+    @test
+    def sortWith03!(): Bool = region r {
+        let a = Array.toMutList(r, Array#{0,1} @ r);
+        MutList.sortWith!(cmp, a);
+        a `sameElements` Array.toMutList(r, Array#{0,1} @ r)
+    }
+
+    @test
+    def sortWith04!(): Bool = region r {
+        let a = Array.toMutList(r, Array#{1,0} @ r);
+        MutList.sortWith!(cmp, a);
+        a `sameElements` Array.toMutList(r, Array#{0,1} @ r)
+    }
+    @test
+    def sortWith05!(): Bool = region r {
+        let a = Array.toMutList(r, Array#{1,1} @ r);
+        MutList.sortWith!(cmp, a);
+        a `sameElements` Array.toMutList(r, Array#{1,1} @ r)
+    }
+
+    @test
+    def sortWith06!(): Bool = region r {
+        let a = Array.toMutList(r, Array#{0,1,2,3,4,5} @ r);
+        MutList.sortWith!(cmp, a);
+        a `sameElements` Array.toMutList(r, Array#{0,1,2,3,4,5} @ r)
+    }
+
+    @test
+    def sortWith07!(): Bool = region r {
+        let a = Array.toMutList(r, Array#{5,4,3,2,1,0} @ r);
+        MutList.sortWith!(cmp, a);
+        a `sameElements` Array.toMutList(r, Array#{0,1,2,3,4,5} @ r)
+    }
+
+    @test
+    def sortWith08!(): Bool = region r {
+        let a = Array.toMutList(r, Array#{5,3,0,4,1,2} @ r);
+        MutList.sortWith!(cmp, a);
+        a `sameElements` Array.toMutList(r, Array#{0,1,2,3,4,5} @ r)
+    }
+
+    @test
+    def sortWith09!(): Bool = region r {
+        let a = Array.toMutList(r, Array#{2,3,0,4,1,2} @ r);
+        MutList.sortWith!(cmp, a);
+        a `sameElements` Array.toMutList(r, Array#{0,1,2,2,3,4} @ r)
+    }
+
+    @test
+    def sortWith10!(): Bool = region r {
+        let a = Array.toMutList(r, Array#{0,1,2,3,4,5} @ r);
+        MutList.sortWith!(flip(cmp), a);
+        a `sameElements` Array.toMutList(r, Array#{5,4,3,2,1,0} @ r)
+    }
+
+    @test
+    def sortWith11!(): Bool = region r {
+        let a = Array.toMutList(r, Array#{5,4,3,2,1,0} @ r);
+        MutList.sortWith!(flip(cmp), a);
+        a `sameElements` Array.toMutList(r, Array#{5,4,3,2,1,0} @ r)
+    }
+
+    @test
+    def sortWith12!(): Bool = region r {
+        let a = Array.toMutList(r, Array#{5,3,0,4,1,2} @ r);
+        MutList.sortWith!(flip(cmp), a);
+        a `sameElements` Array.toMutList(r, Array#{5,4,3,2,1,0} @ r)
+    }
+
+    @test
+    def sortWith13!(): Bool = region r {
+        let a = Array.toMutList(r, Array#{2,3,0,4,1,2} @ r);
+        MutList.sortWith!(flip(cmp), a);
+        a `sameElements` Array.toMutList(r, Array#{4,3,2,2,1,0} @ r)
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // sort!                                                                   //
+    /////////////////////////////////////////////////////////////////////////////
+
+    def testSort!VsSortWith!(a: MutList[Int32, r]): Bool \ { Read(r) } = region r1 {
+        let b = MutList.copy(r1, a);
+        let c = MutList.copy(r1, a);
+        MutList.sort!(b);
+        MutList.sortWith!(cmp, c);
+        b `sameElements` c
+    }
+
+    @test
+    def sort!01(): Bool = region r {
+        testSort!VsSortWith!(Array.toMutList(r, (Array#{} @ r): Array[Int32, r]))
+    }
+
+    @test
+    def sort!02(): Bool = region r {
+        testSort!VsSortWith!(Array.toMutList(r, Array#{0} @ r))
+    }
+
+    @test
+    def sort!03(): Bool = region r {
+        testSort!VsSortWith!(Array.toMutList(r, Array#{0,1} @ r))
+    }
+
+    @test
+    def sort!04(): Bool = region r {
+        testSort!VsSortWith!(Array.toMutList(r, Array#{1,0} @ r))
+    }
+
+    @test
+    def sort!05(): Bool = region r {
+        testSort!VsSortWith!(Array.toMutList(r, Array#{1,1} @ r))
+    }
+
+    @test
+    def sort!06(): Bool = region r {
+        testSort!VsSortWith!(Array.toMutList(r, Array#{0,1,2,3,4,5} @ r))
+    }
+
+    @test
+    def sort!07(): Bool = region r {
+        testSort!VsSortWith!(Array.toMutList(r, Array#{5,4,3,2,1,0} @ r))
+    }
+
+    @test
+    def sort!08(): Bool = region r {
+        testSort!VsSortWith!(Array.toMutList(r, Array#{5,3,0,4,1,2} @ r))
+    }
+
+    @test
+    def sort!09(): Bool = region r {
+        testSort!VsSortWith!(Array.toMutList(r, Array#{2,3,0,4,1,2} @ r))
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // sortBy                                                                  //
+    /////////////////////////////////////////////////////////////////////////////
+
+    def testSortByVsSort(a: MutList[Int32, r]): Bool \ { Read(r) } = region r1 {
+        (MutList.sortBy(r1, identity, a) `sameElements` MutList.sort(r1, a)) and
+        (MutList.sortBy(r1, x -> 4 * x + 7, a) `sameElements` MutList.sort(r1, a)) and
+        (MutList.sortBy(r1, x -> -x, a) `sameElements` MutList.sortWith(r1, flip(cmp),a))
+    }
+
+    @test
+    def sortBy01(): Bool = region r {
+        testSortByVsSort(Array.toMutList(r, (Array#{} @ r): Array[Int32, r]))
+    }
+
+    @test
+    def sortBy02(): Bool = region r {
+        testSortByVsSort(Array.toMutList(r, Array#{0} @ r))
+    }
+
+    @test
+    def sortBy03(): Bool = region r {
+        testSortByVsSort(Array.toMutList(r, Array#{0,1} @ r))
+    }
+
+    @test
+    def sortBy04(): Bool = region r {
+        testSortByVsSort(Array.toMutList(r, Array#{1,0} @ r))
+    }
+
+    @test
+    def sortBy05(): Bool = region r {
+        testSortByVsSort(Array.toMutList(r, Array#{1,1} @ r))
+    }
+
+    @test
+    def sortBy06(): Bool = region r {
+        testSortByVsSort(Array.toMutList(r, Array#{0,1,2,3,4,5} @ r))
+    }
+
+    @test
+    def sortBy07(): Bool = region r {
+        testSortByVsSort(Array.toMutList(r, Array#{5,4,3,2,1,0} @ r))
+    }
+
+    @test
+    def sortBy08(): Bool = region r {
+        testSortByVsSort(Array.toMutList(r, Array#{5,3,0,4,1,2} @ r))
+    }
+
+    @test
+    def sortBy09(): Bool = region r {
+        testSortByVsSort(Array.toMutList(r, Array#{2,3,0,4,1,2} @ r))
+    }
+
+    enum R {
+        case R({i = Int32, s = String})
+    }
+
+    instance Eq[R] {
+        pub def eq(a: R, b: R): Bool =
+            let R.R(x) = a;
+            let R.R(y) = b;
+            x.i == y.i and x.s == y.s
+    }
+
+    @test
+    def sortBy10(): Bool = region r {
+        MutList.sortBy(r, rr -> let R.R(x) = rr; x.i, Array.toMutList(r, Array#{R.R({i = 2, s = "A"}), R.R({i = 1, s = "B"}), R.R({i = 3, s = "C"})} @ r))
+        `sameElements` Array.toMutList(r, Array#{R.R({i = 1, s = "B"}), R.R({i = 2, s = "A"}), R.R({i = 3, s = "C"})} @ r)
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // sortBy!                                                                 //
+    /////////////////////////////////////////////////////////////////////////////
+
+    def testSortBy!VsSortBy(a: MutList[Int32, r]): Bool \ { Read(r) } = region r1 {
+        let b = MutList.copy(r1, a);
+        let c = MutList.copy(r1, a);
+        MutList.sortBy!(identity, b);
+        MutList.sortBy!(x -> 4 * x + 7, c);
+        (b `sameElements` MutList.sortBy(r1, x -> 4 * x + 7, a)) and
+        (c `sameElements` MutList.sortBy(r1, identity, a))
+    }
+
+    @test
+    def sortBy!01(): Bool = region r {
+        testSortBy!VsSortBy(Array.toMutList(r, (Array#{} @ r): Array[Int32, r]))
+    }
+
+    @test
+    def sortBy!02(): Bool = region r {
+        testSortBy!VsSortBy(Array.toMutList(r, Array#{0} @ r))
+    }
+
+    @test
+    def sortBy!03(): Bool = region r {
+        testSortBy!VsSortBy(Array.toMutList(r, Array#{0,1} @ r))
+    }
+
+    @test
+    def sortBy!04(): Bool = region r {
+        testSortBy!VsSortBy(Array.toMutList(r, Array#{1,0} @ r))
+    }
+
+    @test
+    def sortBy!05(): Bool = region r {
+        testSortBy!VsSortBy(Array.toMutList(r, Array#{1,1} @ r))
+    }
+
+    @test
+    def sortBy!06(): Bool = region r {
+        testSortBy!VsSortBy(Array.toMutList(r, Array#{0,1,2,3,4,5} @ r))
+    }
+
+    @test
+    def sortBy!07(): Bool = region r {
+        testSortBy!VsSortBy(Array.toMutList(r, Array#{5,4,3,2,1,0} @ r))
+    }
+
+    @test
+    def sortBy!08(): Bool = region r {
+        testSortBy!VsSortBy(Array.toMutList(r, Array#{5,3,0,4,1,2} @ r))
+    }
+
+    @test
+    def sortBy!09(): Bool = region r {
+        testSortBy!VsSortBy(Array.toMutList(r, Array#{2,3,0,4,1,2} @ r))
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // sum                                                                     //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def sum01(): Bool = region r {
+        new MutList(r) |> MutList.sum == 0
+    }
+
+    @test
+    def sum02(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.sum(l) == 1
+    }
+
+    @test
+    def sum03(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: 2 :: 3 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.sum(l) == 6
+    }
+
+    @test
+    def sum04(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: 2 :: 3 :: -3 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.sum(l) == 3
+    }
+
+    @test
+    def sum05(): Bool = region r {
+        let l = new MutList(r);
+        let xs = -1 :: -2 :: -3 :: -4 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.sum(l) == -10
+    }
+
+    @test
+    def sum06(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 10 :: -10 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.sum(l) == 0
+    }
+
+    @test
+    def sum07(): Bool = region r {
+        let l = new MutList(r);
+        let xs = List.range(1, 101);
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.sum(l) == 5050
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // sumWith                                                                 //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def sumWith01(): Bool = region r {
+        new MutList(r) |> MutList.sumWith(x -> x + 1) == 0
+    }
+
+    @test
+    def sumWith02(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.sumWith(x -> x + 1, l) == 2
+    }
+
+    @test
+    def sumWith03(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: 2 :: 3 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.sumWith(x -> x + 1, l) == 9
+    }
+
+    @test
+    def sumWith04(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: 2 :: 3 :: -3 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.sumWith(x -> x + 1, l) == 7
+    }
+
+    @test
+    def sumWith05(): Bool = region r {
+        let l = new MutList(r);
+        let xs = -1 :: -2 :: -3 :: -4 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.sumWith(x -> x + 1, l) == -6
+    }
+
+    @test
+    def sumWith06(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 10 :: -10 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.sumWith(x -> x + 1, l) == 2
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // join                                                                    //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def join01(): Bool = region r {
+        (new MutList(r): MutList[Int32, _]) |> MutList.join(",") == ""
+    }
+
+    @test
+    def join02(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.join(",", l) == "1"
+    }
+
+    @test
+    def join03(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: 2 :: 3 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.join(",", l) == "1,2,3"
+    }
+
+    @test
+    def join04(): Bool = region r {
+        let l = new MutList(r);
+        let xs = "1" :: "2" :: "3" :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.join(",", l) == "1,2,3"
+    }
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // joinWith                                                                //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def joinWith01(): Bool = region r {
+        (new MutList(r): MutList[Int32, _]) |> MutList.joinWith(x -> "${x + 1}", ",") == ""
+    }
+
+    @test
+    def joinWith02(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.joinWith(x -> "${x + 1}", ",", l) == "2"
+    }
+
+    @test
+    def joinWith03(): Bool = region r {
+        let l = new MutList(r);
+        let xs = 1 :: 2 :: 3 :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.joinWith(x -> "${x + 1}", ",", l) == "2,3,4"
+    }
+
+    @test
+    def joinWith04(): Bool = region r {
+        let l = new MutList(r);
+        let xs = "1" :: "2" :: "3" :: Nil;
+        List.forEach(x -> MutList.push!(x, l), xs);
+        MutList.joinWith(x -> x + x, ",", l) == "11,22,33"
+    }
+
+    /////////////////////////////////////////////////////////////////////////////
+    // shuffle                                                                 //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def shuffle01(): Bool \ NonDet = region r {
+        let l: List[Int32] = Nil;
+        let v = MutList.shuffle(r, Random.new(), List.toMutList(r, l));
+        MutList.sort!(v);
+
+        MutList.length(v) == 0 and v `MutList.sameElements` List.toMutList(r, l)
+    }
+
+    @test
+    def shuffle02(): Bool \ NonDet = region r {
+        let l = 1 :: Nil;
+        let v = MutList.shuffle(r, Random.new(), List.toMutList(r, l));
+        MutList.sort!(v);
+
+        MutList.length(v) == 1 and v `MutList.sameElements` List.toMutList(r, l)
+    }
+
+    @test
+    def shuffle03(): Bool \ NonDet = region r {
+        let l = 1 :: 2 :: 3 :: Nil;
+        let v = MutList.shuffle(r, Random.new(), List.toMutList(r, l));
+        MutList.sort!(v);
+
+        MutList.length(v) == 3 and v `MutList.sameElements` List.toMutList(r, l)
+    }
+
+    @test
+    def shuffle04(): Bool \ NonDet = region r {
+        let l = 0 :: 1 :: 2 :: 3 :: 4 :: 5 :: 6 :: 7 :: 8 :: 9 :: Nil;
+        let v = MutList.shuffle(r, Random.new(), List.toMutList(r, l));
+        MutList.sort!(v);
+
+        MutList.length(v) == 10 and v `MutList.sameElements` List.toMutList(r, l)
+    }
 
 }

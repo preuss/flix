@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Magnus Madsen
+ * Copyright 2022 Magnus Madsen
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,31 +15,51 @@
  */
 
 namespace Channel {
+    use Time.Duration
 
     ///
-    /// Returns a fresh unbuffered channel.
+    /// Returns a new buffered channel with capacity for `n` elements.
     ///
-    /// An unbuffered channel has an internal capacity of `0`.
+    pub def buffered(r: Region[r], n: Int32): (Sender[t, r], Receiver[t, r]) \ Write(r) =
+        let m = if (n < 0) 0 else n;
+        $CHANNEL_NEW$(r, m)
+        
     ///
-    pub def new(): Channel[a] & Impure = chan a 0
+    /// Returns a new unbuffered channel (i.e. a channel with zero capacity).
+    ///
+    pub def unbuffered(r: Region[r]): (Sender[t, r], Receiver[t, r]) \ Write(r) = buffered(r, 0)
 
     ///
-    /// Returns a fresh buffered channel with internal capacity `c`.
+    /// Receives a message from the given channel `r`.
     ///
-    pub def newWithCapacity(c: Int): Channel[a] & Impure = chan a c
+    /// Blocks until a message is dequeued.
+    ///
+    pub def recv(receiver: Receiver[t, r]): t \ { Read(r), Write(r) } = $CHANNEL_GET$(receiver)
 
     ///
-    /// Receives an element from the channel `c`.
+    /// Sends the message `m` on the given channel `s`.
     ///
-    /// Equivalent to the expression `<- c`.
+    /// Blocks until the message is enqueued.
     ///
-    pub def get(c: Channel[a]): a & Impure = <- c
+    pub def send(m: t, sender: Sender[t, r]): Unit \ Write(r) with Sendable[t] = $CHANNEL_PUT$(sender, m)
 
     ///
-    /// Sends the element `x` on the channel `c`.
+    /// Sends the message `m` on the given channel `s`.
     ///
-    /// Equivalent to the expression `c <- x`.
+    /// Blocks until the message is enqueued.
     ///
-    pub def put(c: Channel[a], x: a): Channel[a] & Impure = c <- x
+    /// Identical to `send` but doesn't require `Sendable`.
+    /// It is up to programmer to ensure that race conditions cannot arise due to concurrent access to `m`.
+    ///
+    @Unsafe
+    pub def unsafeSend(m: t, sender: Sender[t, r]): Unit \ Write(r) = $CHANNEL_PUT$(sender, m)
+
+    ///
+    /// Returns a channel that receives the `Unit` message after duration `d`.
+    ///
+    pub def timeout(r: Region[r], d: Duration): Receiver[Unit, r] \ { Read(r), Write(r), IO } = 
+        let (tx, rx) = Channel.unbuffered(r);
+        spawn { Thread.sleep(d); send((), tx) } @ r;
+        rx
 
 }

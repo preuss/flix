@@ -15,19 +15,79 @@
  */
 
 namespace Fixpoint/Ast {
+
+    use Fixpoint.PredSymsOf
+    use Fixpoint/PredSymsOf.predSymsOf
+    use Fixpoint.SubstitutePredSym
+    use Fixpoint/SubstitutePredSym.substitute
+    use Fixpoint/Tuple.Tuple
+    use Fixpoint/Shared.PredSym
+    use Fixpoint/Ram.RamSym
+
+    @Internal
     pub enum Datalog[v] {
-        case Datalog(Array[Constraint[v]], Array[Constraint[v]])
+        case Datalog(List[Constraint[v]], List[Constraint[v]])
+        case Model(Map[RamSym[v], Map[Tuple[v], v]])
+        case Join(Datalog[v], Datalog[v])
     }
 
-    instance ToString[Datalog[v]] with ToString[v] {
-        pub def toString(cs: Datalog[v]): String =
-            let toStr = match Datalog(facts, rules) -> {
-                let sb = StringBuilder.new();
-                Array.append(facts, rules) |>
-                Array.map(ToString.toString) |>
-                StringBuilder.appendLines!(sb);
+    instance PredSymsOf[Datalog[v]] {
+        pub def predSymsOf(x: Datalog[v]): Set[PredSym] = match x {
+            case Datalog.Datalog(facts, rules) =>
+                let factSyms = facts |> List.map(predSymsOf) |> Monoid.fold;
+                let ruleSyms = rules |> List.map(predSymsOf) |> Monoid.fold;
+                factSyms ++ ruleSyms
+            case Datalog.Model(m)              => Map.keysOf(m) |> Set.toList |> List.map(predSymsOf) |> Monoid.fold
+            case Datalog.Join(v1, v2)          => predSymsOf(v1) ++ predSymsOf(v2)
+        }
+    }
+
+    instance SubstitutePredSym[Datalog[v]] {
+        pub def substitute(x: Datalog[v], s: Map[PredSym, PredSym]): Datalog[v] = match x {
+            case Datalog.Datalog(facts, rules) =>
+                let newFacts = List.map(c -> substitute(c, s), facts);
+                let newRules = List.map(c -> substitute(c, s), rules);
+                Datalog.Datalog(newFacts, newRules)
+            case Datalog.Model(m) =>
+                def f(macc, sym, v) = {
+                    let newSym = substitute(sym, s);
+                    Map.insert(newSym, v, macc)
+                };
+                Datalog.Model(Map.foldLeftWithKey(f, Map.empty(), m))
+            case Datalog.Join(v1, v2) => Datalog.Join(substitute(v1, s), substitute(v2, s))
+        }
+    }
+
+    instance ToString[Datalog[v]] {
+        pub def toString(cs: Datalog[v]): String = match cs {
+            case Datalog.Datalog(facts, rules) => region r {
+                let sb = new StringBuilder(r);
+                let appendConstraint = f -> StringBuilder.appendLineWith!(ToString.toString, f, sb);
+                foreach (f <- facts) appendConstraint(f);
+                foreach (ru <- rules) appendConstraint(ru);
                 StringBuilder.toString(sb)
-            };
-            toStr(cs) as & Pure
+            }
+            case Datalog.Model(db) => region r {
+                use Fixpoint/Ram.toDenotation;
+                let sb = new StringBuilder(r);
+                Map.forEach(ramSym -> rel -> match toDenotation(ramSym) {
+                    case Denotation.Relational => Map.forEach((tuple, _) -> {
+                        let tupleString = Fixpoint/Tuple.toList(tuple) |> List.map(Debug.stringify) |> List.join(", ");
+                        StringBuilder.appendLine!("${ramSym}(${tupleString}).", sb)
+                    }, rel)
+                    case Denotation.Latticenal(_) => Map.forEach((tuple, lat) -> {
+                        let tupleString = Fixpoint/Tuple.toList(tuple) |> List.map(Debug.stringify) |> List.join(", ");
+                        StringBuilder.appendLine!("${ramSym}(${tupleString}; %{lat}).", sb)
+                    }, rel)
+                }, db);
+                StringBuilder.toString(sb)
+            }
+            case Datalog.Join(d1, d2) => region r {
+                let sb = new StringBuilder(r);
+                StringBuilder.appendLine!(ToString.toString(d1), sb);
+                StringBuilder.appendLine!(ToString.toString(d2), sb);
+                StringBuilder.toString(sb)
+            }
+        }
     }
 }

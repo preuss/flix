@@ -17,7 +17,7 @@
 ///
 /// A type class for subtraction.
 ///
-pub lawless class Sub[a] {
+pub class Sub[a] {
     ///
     /// Returns the difference of `x` and `y`.
     ///
@@ -30,6 +30,10 @@ instance Sub[Float32] {
 
 instance Sub[Float64] {
     pub def sub(x: Float64, y: Float64): Float64 = $FLOAT64_SUB$(x, y)
+}
+
+instance Sub[BigDecimal] {
+    pub def sub(x: BigDecimal, y: BigDecimal): BigDecimal = $BIGDECIMAL_SUB$(x, y)
 }
 
 instance Sub[Int8] {

@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-use Fixpoint/Ram.{RamStmt, RelOp, RamSym, RamTerm, BoolExp, RowVar};
-
 namespace Fixpoint {
+
+    use Fixpoint/Ram.{RamStmt, RelOp, RamSym, RamTerm, BoolExp, RowVar}
+
     ///
     /// Hoist and query optimize `stmt`.
     ///
@@ -58,6 +59,7 @@ namespace Fixpoint {
     ///
     /// Step 1 and Step 2 are implemented as one pass.
     ///
+    @Internal
     pub def queryStmt(stmt: RamStmt[v]): RamStmt[v] = match stmt {
         case RamStmt.Insert(op) =>
             let (innerOp, ground) = queryOp(op, Set#{});
@@ -112,11 +114,10 @@ namespace Fixpoint {
                     (search, ground)
             else
                 let query =
-                    (List.map(x -> match x {
+                    List.map(x -> match x {
                         case Eq(RamTerm.RowLoad(_, j), rhs) => (j, rhs)
                         case _ => ???
-                    }, prefixQuery) |>
-                    List.toArray) as & Pure;
+                    }, prefixQuery);
                 if (List.isEmpty(test))
                     let search = RelOp.Query(var, ramSym, query, innerOp);
                     (search, ground)
@@ -135,7 +136,7 @@ namespace Fixpoint {
         use Fixpoint/Ram.RamTerm.{RowLoad, Lit};
         // Sort equalities of the form `var[i] = rhs` ascending on `i`.
         List.sortWith(x -> y -> match (x, y) {
-            case (Eq(RowLoad(_, index1), _), Eq(RowLoad(_, index2), _)) => index1 - index2
+            case (Eq(RowLoad(_, index1), _), Eq(RowLoad(_, index2), _)) => Comparison.fromInt32(index1 - index2)
             case _ => ???
         }, varQuery) |>
         // Group `var[i] = rhs` by `i`.
@@ -148,7 +149,10 @@ namespace Fixpoint {
     def prefixHelper(i: Int32, prefix: List[BoolExp[v]], rest: List[BoolExp[v]], eqs: List[List[BoolExp[v]]]): (List[BoolExp[v]], List[BoolExp[v]]) =
         match eqs {
             case e :: es =>
-                let (p, r) = List.partition(match BoolExp.Eq(RamTerm.RowLoad(_, j), _) -> i == j, e);
+                let (p, r) = List.partition(be -> match be {
+                    case BoolExp.Eq(RamTerm.RowLoad(_, j), _) => i == j
+                    case _ => ???
+                }, e);
                 prefixHelper(i + 1, prefix ::: p, rest ::: r, es)
             case Nil => (prefix, rest)
         }
@@ -158,7 +162,7 @@ namespace Fixpoint {
     ///
     def isExpGround(freeVars: Set[RowVar], exp: BoolExp[v]): Bool = match exp {
         case BoolExp.Empty(_) => true
-        case BoolExp.NotMemberOf(terms, _) => Array.forall(isTermGround(freeVars), terms) as & Pure
+        case BoolExp.NotMemberOf(terms, _) => List.forAll(isTermGround(freeVars), terms)
         case BoolExp.Eq(lhs, rhs) => isTermGround(freeVars, lhs) and isTermGround(freeVars, rhs)
         case BoolExp.Leq(_, lhs, rhs) => isTermGround(freeVars, lhs) and isTermGround(freeVars, rhs)
         case BoolExp.Guard0(_) => true

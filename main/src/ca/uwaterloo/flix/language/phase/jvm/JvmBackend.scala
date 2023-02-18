@@ -1,5 +1,6 @@
 /*
  * Copyright 2017 Magnus Madsen
+ * Copyright 2021 Jonathan Lindegaard Starup
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,31 +17,22 @@
 
 package ca.uwaterloo.flix.language.phase.jvm
 
-import java.lang.reflect.InvocationTargetException
-import java.nio.file.{Path, Paths}
-
 import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.language.CompilationError
-import ca.uwaterloo.flix.language.ast.FinalAst._
+import ca.uwaterloo.flix.language.CompilationMessage
+import ca.uwaterloo.flix.language.ast.ErasedAst._
 import ca.uwaterloo.flix.language.ast.{MonoType, Symbol}
-import ca.uwaterloo.flix.language.phase.Phase
 import ca.uwaterloo.flix.runtime.CompilationResult
 import ca.uwaterloo.flix.util.Validation._
-import ca.uwaterloo.flix.util.{InternalRuntimeException, Validation}
-import flix.runtime.ProxyObject
+import ca.uwaterloo.flix.util.Validation
 
+import java.lang.reflect.InvocationTargetException
 
-object JvmBackend extends Phase[Root, CompilationResult] {
-
-  /**
-    * The directory where to place the generated class files.
-    */
-  val TargetDirectory: Path = Paths.get("./target/flix/")
+object JvmBackend {
 
   /**
     * Emits JVM bytecode for the given AST `root`.
     */
-  def run(root: Root)(implicit flix: Flix): Validation[CompilationResult, CompilationError] = flix.phase("JvmBackend") {
+  def run(root: Root)(implicit flix: Flix): Validation[CompilationResult, CompilationMessage] = flix.phase("JvmBackend") {
 
     //
     // Put the AST root into implicit scope.
@@ -49,12 +41,6 @@ object JvmBackend extends Phase[Root, CompilationResult] {
 
     // Generate all classes.
     val allClasses = flix.subphase("CodeGen") {
-      //
-      // Immediately return if in verification mode.
-      //
-      if (flix.options.verifier) {
-        return new CompilationResult(root, None, Map.empty).toSuccess
-      }
 
       //
       // Compute the set of closures in the program.
@@ -76,35 +62,47 @@ object JvmBackend extends Phase[Root, CompilationResult] {
       //
       val types = JvmOps.typesOf(root)
 
+      val erasedRefTypes: Iterable[BackendObjType.Ref] = JvmOps.getRefsOf(types)
+      val erasedExtendTypes: Iterable[BackendObjType.RecordExtend] = JvmOps.getRecordExtendsOf(types)
+      val erasedFunctionTypes: Iterable[BackendObjType.Arrow] = JvmOps.getArrowsOf(types)
+      val erasedContinuations: Iterable[BackendObjType.Continuation] =
+        erasedFunctionTypes.map(f => BackendObjType.Continuation(f.result)).toSet
+      // TODO: all the type collection above should maybe have its own subphase
+
+      //
+      // Compute the set of anonymous classes (NewObjects) in the program.
+      //
+      val anonClassDefs = JvmOps.anonClassesOf(root)
+
       //
       // Generate the main class.
       //
       val mainClass = GenMainClass.gen()
 
       //
-      // Generate the Context class.
-      //
-      val contextClass = GenContext.gen(namespaces)
-
-      //
       // Generate the namespace classes.
       //
-      val namespaceClasses = GenNamespaces.gen(namespaces)
+      val namespaceClasses = GenNamespaceClasses.gen(namespaces)
 
       //
-      // Generate continuation interfaces for each function type in the program.
+      // Generate continuation classes for each function type in the program.
       //
-      val continuationInterfaces = GenContinuationInterfaces.gen(types)
+      val continuationInterfaces = GenContinuationAbstractClasses.gen(erasedContinuations)
 
       //
-      // Generate function interfaces for each function type in the program.
+      // Generate a function abstract class for each function type in the program.
       //
-      val functionInterfaces = GenFunctionInterfaces.gen(types)
+      val functionInterfaces = GenFunctionAbstractClasses.gen(erasedFunctionTypes)
 
       //
       // Generate function classes for each function in the program.
       //
       val functionClasses = GenFunctionClasses.gen(root.defs)
+
+      //
+      // Generate closure abstract classes for each function in the program.
+      //
+      val closureAbstractClasses = GenClosureAbstractClasses.gen(types)
 
       //
       // Generate closure classes for each closure in the program.
@@ -122,11 +120,6 @@ object JvmBackend extends Phase[Root, CompilationResult] {
       val tagClasses = GenTagClasses.gen(tags)
 
       //
-      // Generate tuple interfaces for each tuple type in the program.
-      //
-      val tupleInterfaces = GenTupleInterfaces.gen(types)
-
-      //
       // Generate tuple classes for each tuple type in the program.
       //
       val tupleClasses = GenTupleClasses.gen(types)
@@ -134,50 +127,101 @@ object JvmBackend extends Phase[Root, CompilationResult] {
       //
       // Generate record interface.
       //
-      val recordInterfaces = GenRecordInterfaces.gen()
+      val recordInterfaces = GenRecordInterface.gen()
 
       //
       // Generate empty record class.
       //
-      val recordEmptyClasses = GenRecordEmpty.gen()
+      val recordEmptyClasses = GenRecordEmptyClass.gen()
 
       //
       // Generate extended record classes for each (different) RecordExtend type in the program
       //
-      val recordExtendClasses = GenRecordExtend.gen(types)
+      val recordExtendClasses = GenRecordExtendClasses.gen(erasedExtendTypes)
 
       //
       // Generate references classes.
       //
-
-      val refClasses = GenRefClasses.gen()
+      val refClasses = GenRefClasses.gen(erasedRefTypes)
 
       //
       // Generate lazy classes.
       //
-
       val lazyClasses = GenLazyClasses.gen(types)
+
+      //
+      // Generate anonymous classes.
+      //
+      val anonClasses = GenAnonymousClasses.gen(anonClassDefs)
+
+      //
+      // Generate the Unit class.
+      //
+      val unitClass = GenUnitClass.gen()
+
+      //
+      // Generate the FlixError class.
+      //
+      val flixErrorClass = GenFlixErrorClass.gen()
+
+      //
+      // Generate the ReifiedSourceLocation class.
+      //
+      val rslClass = GenReifiedSourceLocationClass.gen()
+
+      //
+      // Generate the HoleError class.
+      //
+      val holeErrorClass = GenHoleErrorClass.gen()
+
+      //
+      // Generate the MatchError class.
+      //
+      val matchErrorClass = GenMatchErrorClass.gen()
+
+      //
+      // Generate the Global class.
+      //
+      val globalClass = GenGlobalClass.gen()
+
+      //
+      // Generate the Region class.
+      //
+      val regionClass = GenRegionClass.gen()
+
+      //
+      // Generate the UncaughtExceptionHandler class.
+      //
+      val uncaughtExceptionHandlerClass = GenUncaughtExceptionHandlerClass.gen()
 
       //
       // Collect all the classes and interfaces together.
       //
       List(
         mainClass,
-        contextClass,
         namespaceClasses,
         continuationInterfaces,
         functionInterfaces,
         functionClasses,
+        closureAbstractClasses,
         closureClasses,
         enumInterfaces,
         tagClasses,
-        tupleInterfaces,
         tupleClasses,
         recordInterfaces,
         recordEmptyClasses,
         recordExtendClasses,
         refClasses,
-        lazyClasses
+        lazyClasses,
+        anonClasses,
+        unitClass,
+        flixErrorClass,
+        rslClass,
+        holeErrorClass,
+        matchErrorClass,
+        globalClass,
+        regionClass,
+        uncaughtExceptionHandlerClass
       ).reduce(_ ++ _)
     }
 
@@ -185,13 +229,16 @@ object JvmBackend extends Phase[Root, CompilationResult] {
     // Write each class (and interface) to disk.
     //
     // NB: In interactive and test mode we skip writing the files to disk.
-    if (flix.options.writeClassFiles && !flix.options.test) {
+    if (flix.options.output.nonEmpty) {
       flix.subphase("WriteClasses") {
-        for ((jvmName, jvmClass) <- allClasses) {
-          JvmOps.writeClass(TargetDirectory, jvmClass)
+        for ((_, jvmClass) <- allClasses) {
+          flix.subtask(jvmClass.name.toBinaryName, sample = true)
+          JvmOps.writeClass(flix.options.output.get, jvmClass)
         }
       }
     }
+
+    val outputBytes = allClasses.map(_._2.bytecode.length).sum
 
     val loadClasses = flix.options.loadClassFiles
 
@@ -199,39 +246,27 @@ object JvmBackend extends Phase[Root, CompilationResult] {
       //
       // Do not load any classes.
       //
-      new CompilationResult(root, None, Map.empty).toSuccess
+      new CompilationResult(root, None, Map.empty, flix.getTotalTime, outputBytes).toSuccess
     } else {
       //
       // Loads all the generated classes into the JVM and decorates the AST.
+      // Returns the main of `Main.class` if it exists.
       //
-      Bootstrap.bootstrap(allClasses)
+      val main = Bootstrap.bootstrap(allClasses)
 
       //
       // Return the compilation result.
       //
-      new CompilationResult(root, getCompiledMain(root), getCompiledDefs(root)).toSuccess
+      new CompilationResult(root, main, getCompiledDefs(root), flix.getTotalTime, outputBytes).toSuccess
     }
   }
 
   /**
-    * Optionally returns a reference to main.
-    */
-  private def getCompiledMain(root: Root)(implicit flix: Flix): Option[Array[String] => Int] =
-    root.defs.get(Symbol.Main) map {
-      case defn =>
-        (actualArgs: Array[String]) => {
-        val args: Array[AnyRef] = Array(actualArgs)
-          val result = link(defn.sym, root).apply(args).getValue
-          result.asInstanceOf[Integer].intValue()
-        }
-    }
-
-  /**
     * Returns a map from definition symbols to executable functions (backed by JVM backend).
     */
-  private def getCompiledDefs(root: Root)(implicit flix: Flix): Map[Symbol.DefnSym, () => ProxyObject] =
-    root.defs.foldLeft(Map.empty[Symbol.DefnSym, () => ProxyObject]) {
-      case (macc, (sym, defn)) =>
+  private def getCompiledDefs(root: Root)(implicit flix: Flix): Map[Symbol.DefnSym, () => AnyRef] =
+    root.defs.foldLeft(Map.empty[Symbol.DefnSym, () => AnyRef]) {
+      case (macc, (sym, _)) =>
         val args: Array[AnyRef] = Array(null)
         macc + (sym -> (() => link(sym, root).apply(args)))
     }
@@ -239,20 +274,20 @@ object JvmBackend extends Phase[Root, CompilationResult] {
   /**
     * Returns a function object for the given definition symbol `sym`.
     */
-  private def link(sym: Symbol.DefnSym, root: Root)(implicit flix: Flix): java.util.function.Function[Array[AnyRef], ProxyObject] =
+  private def link(sym: Symbol.DefnSym, root: Root)(implicit flix: Flix): java.util.function.Function[Array[AnyRef], AnyRef] =
     (args: Array[AnyRef]) => {
       ///
       /// Retrieve the definition and its type.
       ///
       val defn = root.defs(sym)
-      val MonoType.Arrow(targs, tresult) = defn.tpe
+      val MonoType.Arrow(_, _) = defn.tpe
 
       ///
       /// Construct the arguments array.
       ///
       val argsArray = if (args.isEmpty) Array(null) else args
       if (argsArray.length != defn.method.getParameterCount) {
-        throw InternalRuntimeException(s"Expected ${defn.method.getParameterCount} arguments, but got: ${argsArray.length} for method ${defn.method.getName}.")
+        throw new RuntimeException(s"Expected ${defn.method.getParameterCount} arguments, but got: ${argsArray.length} for method ${defn.method.getName}.")
       }
 
       ///
@@ -261,31 +296,12 @@ object JvmBackend extends Phase[Root, CompilationResult] {
       try {
         // Call the method passing the arguments.
         val result = defn.method.invoke(null, argsArray: _*)
-
-        // Construct a fresh proxy object.
-        newProxyObj(result, tresult, root)
+        result
       } catch {
         case e: InvocationTargetException =>
           // Rethrow the underlying exception.
           throw e.getTargetException
       }
     }
-
-  /**
-    * Returns a proxy object that wraps the given result value.
-    */
-  private def newProxyObj(result: AnyRef, resultType: MonoType, root: Root)(implicit flix: Flix): ProxyObject = {
-    // Lookup the Equality method.
-    val eq = null
-
-    // Lookup the HashCode method.
-    val hash = null
-
-    // Lookup the ToString method.
-    val toString = null
-
-    // Create the proxy object.
-    ProxyObject.of(result, eq, hash, toString)
-  }
 
 }

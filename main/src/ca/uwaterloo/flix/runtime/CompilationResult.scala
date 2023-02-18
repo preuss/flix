@@ -16,28 +16,26 @@
 
 package ca.uwaterloo.flix.runtime
 
-import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.language.ast.FinalAst._
+import ca.uwaterloo.flix.language.ast.ErasedAst._
 import ca.uwaterloo.flix.language.ast._
-import flix.runtime.ProxyObject
 
 /**
   * A class representing the result of a compilation.
   *
-  * @param root the abstract syntax tree of the program.
-  * @param defs the definitions in the program.
+  * @param root     the abstract syntax tree of the program.
+  * @param defs     the definitions in the program.
+  * @param codeSize the number of bytes the compiler generated.
   */
-class CompilationResult(root: Root, main: Option[Array[String] => Int], defs: Map[Symbol.DefnSym, () => ProxyObject])(implicit flix: Flix) {
-
-  /**
-    * Returns the root AST.
-    */
-  def getRoot: Root = root
+class CompilationResult(root: Root,
+                        main: Option[Array[String] => Unit],
+                        defs: Map[Symbol.DefnSym, () => AnyRef],
+                        val totalTime: Long,
+                        val codeSize: Int) {
 
   /**
     * Optionally returns the main function.
     */
-  def getMain: Option[Array[String] => Int] = main
+  def getMain: Option[Array[String] => Unit] = main
 
   /**
     * Returns all the benchmark functions in the program.
@@ -51,29 +49,19 @@ class CompilationResult(root: Root, main: Option[Array[String] => Int], defs: Ma
   /**
     * Returns all the test functions in the program.
     */
-  def getTests: Map[Symbol.DefnSym, () => AnyRef] = {
-    defs filter {
-      case (sym, _) => root.defs(sym).ann.isTest
+  def getTests: Map[Symbol.DefnSym, TestFn] = {
+    defs.collect {
+      case (sym, run) if root.defs(sym).ann.isTest =>
+        val skip = root.defs(sym).ann.isSkip
+        sym -> TestFn(sym, skip, run)
     }
   }
 
   /**
     * Returns the total number of lines of compiled code.
     */
-  def getTotalLines(): Int = getRoot.sources.foldLeft(0) {
+  def getTotalLines: Int = root.sources.foldLeft(0) {
     case (acc, (_, sl)) => acc + sl.endLine
   }
-
-  /**
-    * Returns the total compilation time in nanoseconds.
-    */
-  def getTotalTime(): Long = flix.phaseTimers.foldLeft(0L) {
-    case (acc, phase) => acc + phase.time
-  }
-
-  /**
-    * Returns the result type of the given lambda type.
-    */
-  private def getResultType(tpe: Type): Type = tpe.typeArguments.last
 
 }

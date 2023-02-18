@@ -1,5 +1,10 @@
 package ca.uwaterloo.flix.language.ast
 
+import ca.uwaterloo.flix.language.ast.Ast.{EliminatedBy, IntroducedBy}
+import ca.uwaterloo.flix.language.phase.{Kinder, Lowering}
+
+import scala.collection.immutable.SortedSet
+
 /**
   * Representation of type constructors.
   */
@@ -52,6 +57,13 @@ object TypeConstructor {
   }
 
   /**
+    * A type constructor that represent the type of arbitrary-precision floating point numbers.
+    */
+  case object BigDecimal extends TypeConstructor {
+    def kind: Kind = Kind.Star
+  }
+
+  /**
     * A type constructor that represent the type of 8-bit integers.
     */
   case object Int8 extends TypeConstructor {
@@ -96,62 +108,85 @@ object TypeConstructor {
   /**
     * A type constructor that represents the type of functions.
     */
+  @IntroducedBy(Kinder.getClass)
   case class Arrow(arity: Int) extends TypeConstructor {
-    def kind: Kind = Kind.Bool ->: Kind.mkArrow(arity)
+    def kind: Kind = Kind.Bool ->: Kind.Effect ->: Kind.mkArrow(arity)
   }
 
   /**
-    * A type constructor that represents the type of empty records.
+    * A type constructor that represents the type of empty record rows.
     */
-  case object RecordEmpty extends TypeConstructor {
-    def kind: Kind = Kind.Record
+  case object RecordRowEmpty extends TypeConstructor {
+    def kind: Kind = Kind.RecordRow
   }
 
   /**
-    * A type constructor that represents the type of extended records.
+    * A type constructor that represents the type of extended record rows.
     */
-  case class RecordExtend(field: Name.Field) extends TypeConstructor {
+  case class RecordRowExtend(field: Name.Field) extends TypeConstructor {
     /**
-      * The shape of an extended record is { field: type | rest }
+      * The shape of an extended record is { field :: type | rest }
       */
-    def kind: Kind = Kind.Star ->: Kind.Record ->: Kind.Record
+    def kind: Kind = Kind.Star ->: Kind.RecordRow ->: Kind.RecordRow
   }
 
   /**
-    * A type constructor that represents the type of empty schemas.
+    * A type constructor that represents the type of records.
     */
-  case object SchemaEmpty extends TypeConstructor {
-    def kind: Kind = Kind.Schema
-  }
-
-  /**
-    * A type constructor that represents the type of extended schemas.
-    */
-  case class SchemaExtend(pred: Name.Pred) extends TypeConstructor {
+  case object Record extends TypeConstructor {
     /**
-      * The shape of an extended schema is { name: type | rest }
+      * The shape of a record constructor is Record[row]
       */
-    def kind: Kind = Kind.Star ->: Kind.Schema ->: Kind.Schema
+    def kind: Kind = Kind.RecordRow ->: Kind.Star
   }
 
   /**
-    * A type constructor that represent the type of arrays.
+    * A type constructor that represents the type of empty schema rows.
     */
-  case object Array extends TypeConstructor {
-    /**
-      * The shape of an array is Array[t].
-      */
-    def kind: Kind = Kind.Star ->: Kind.Star
+  case object SchemaRowEmpty extends TypeConstructor {
+    def kind: Kind = Kind.SchemaRow
   }
 
   /**
-    * A type constructor that represent the type of channels.
+    * A type constructor that represents the type of extended schema rows.
     */
-  case object Channel extends TypeConstructor {
+  case class SchemaRowExtend(pred: Name.Pred) extends TypeConstructor {
     /**
-      * The shape of a channel is Channel[t].
+      * The shape of an extended schema is { name :: type | rest }
       */
-    def kind: Kind = Kind.Star ->: Kind.Star
+    def kind: Kind = Kind.Predicate ->: Kind.SchemaRow ->: Kind.SchemaRow
+  }
+
+  /**
+    * A type constructor that represents the type of schemas.
+    */
+  case object Schema extends TypeConstructor {
+    /**
+      * The shape of a schema constructor is Schema[row]
+      */
+    def kind: Kind = Kind.SchemaRow ->: Kind.Star
+  }
+
+  /**
+    * A type constructor that represent the type of channel senders.
+    */
+  @EliminatedBy(Lowering.getClass)
+  case object Sender extends TypeConstructor {
+    /**
+      * The shape of a sender is Sender[t, r].
+      */
+    def kind: Kind = Kind.Star ->: Kind.Bool ->: Kind.Star
+  }
+
+  /**
+    * A type constructor that represent the type of channel receivers.
+    */
+  @EliminatedBy(Lowering.getClass)
+  case object Receiver extends TypeConstructor {
+    /**
+      * The shape of a sender is Receiver[t, r].
+      */
+    def kind: Kind = Kind.Star ->: Kind.Bool ->: Kind.Star
   }
 
   /**
@@ -165,19 +200,16 @@ object TypeConstructor {
   }
 
   /**
-    * A type constructor that represent the type of tags.
+    * A type constructor that represents the type of enums.
     */
-  case class Tag(sym: Symbol.EnumSym, tag: Name.Tag) extends TypeConstructor {
-    /**
-      * The shape of a tag is "like" a function `caseType` -> (`resultType`) -> *.
-      */
-    def kind: Kind = Kind.Star ->: Kind.Star ->: Kind.Star
-  }
+  @IntroducedBy(Kinder.getClass)
+  case class Enum(sym: Symbol.EnumSym, kind: Kind) extends TypeConstructor
 
   /**
-    * A type constructor that represent the type of enums.
+    * A type constructor that represents the type of enums.
     */
-  case class Enum(sym: Symbol.EnumSym, kind: Kind) extends TypeConstructor
+  @IntroducedBy(Kinder.getClass)
+  case class RestrictableEnum(sym: Symbol.RestrictableEnumSym, kind: Kind) extends TypeConstructor
 
   /**
     * A type constructor that represent the type of JVM classes.
@@ -187,13 +219,33 @@ object TypeConstructor {
   }
 
   /**
+    * A type constructor that represent the type of arrays.
+    */
+  case object Array extends TypeConstructor {
+    /**
+      * The shape of an array is `Array[t, l]`.
+      */
+    def kind: Kind = Kind.Star ->: Kind.Bool ->: Kind.Star
+  }
+
+  /**
+    * A type constructor that represent the type of vectors.
+    */
+  case object Vector extends TypeConstructor {
+    /**
+      * The shape of an array is `Array[t]`.
+      */
+    def kind: Kind = Kind.Star ->: Kind.Star
+  }
+
+  /**
     * A type constructor that represent the type of references.
     */
   case object Ref extends TypeConstructor {
     /**
-      * The shape of a reference is Ref[t].
+      * The shape of a reference is `Ref[t, l]`.
       */
-    def kind: Kind = Kind.Star ->: Kind.Star
+    def kind: Kind = Kind.Star ->: Kind.Bool ->: Kind.Star
   }
 
   /**
@@ -210,14 +262,14 @@ object TypeConstructor {
     * A type constructor for relations.
     */
   case object Relation extends TypeConstructor {
-    def kind: Kind = Kind.Star ->: Kind.Star
+    def kind: Kind = Kind.Star ->: Kind.Predicate
   }
 
   /**
     * A type constructor for lattices.
     */
   case object Lattice extends TypeConstructor {
-    def kind: Kind = Kind.Star ->: Kind.Star
+    def kind: Kind = Kind.Star ->: Kind.Predicate
   }
 
   /**
@@ -253,6 +305,86 @@ object TypeConstructor {
     */
   case object Or extends TypeConstructor {
     def kind: Kind = Kind.Bool ->: Kind.Bool ->: Kind.Bool
+  }
+
+  /**
+    * A type constructor that represents the complement of an effect set.
+    */
+  case object Complement extends TypeConstructor {
+    def kind: Kind = Kind.Effect ->: Kind.Effect
+  }
+
+  /**
+    * A type constructor that represents the union of two effect sets.
+    */
+  case object Union extends TypeConstructor {
+    def kind: Kind = Kind.Effect ->: Kind.Effect ->: Kind.Effect
+  }
+
+  /**
+    * A type constructor that represents the intersection of two effect sets.
+    */
+  case object Intersection extends TypeConstructor {
+    def kind: Kind = Kind.Effect ->: Kind.Effect ->: Kind.Effect
+  }
+
+  /**
+    * A type constructor that represents a single effect.
+    */
+  case class Effect(sym: Symbol.EffectSym) extends TypeConstructor {
+    def kind: Kind = Kind.Effect
+  }
+
+  /**
+    * A type constructor that represents the empty effect.
+    */
+  case object Empty extends TypeConstructor {
+    def kind: Kind = Kind.Effect
+  }
+
+  /**
+    * A type constructor that represents the set of all effects.
+    */
+  case object All extends TypeConstructor {
+    def kind: Kind = Kind.Effect
+  }
+
+  /**
+    * A type constructor that represents the complement of a case set.
+    */
+  case class CaseComplement(sym: Symbol.RestrictableEnumSym) extends TypeConstructor {
+    def kind: Kind = Kind.CaseSet(sym) ->: Kind.CaseSet(sym)
+  }
+
+  /**
+    * A type constructor that represents the union of two case sets.
+    */
+  case class CaseUnion(sym: Symbol.RestrictableEnumSym) extends TypeConstructor {
+    def kind: Kind = Kind.CaseSet(sym) ->: Kind.CaseSet(sym) ->: Kind.CaseSet(sym)
+  }
+
+  /**
+    * A type constructor that represents the intersection of two case sets.
+    */
+  case class CaseIntersection(sym: Symbol.RestrictableEnumSym) extends TypeConstructor {
+    def kind: Kind = Kind.CaseSet(sym) ->: Kind.CaseSet(sym) ->: Kind.CaseSet(sym)
+  }
+
+  /**
+    * A type constructor that represents a case constant.
+    */
+  case class CaseSet(syms: SortedSet[Symbol.RestrictableCaseSym], enumSym: Symbol.RestrictableEnumSym) extends TypeConstructor {
+    def kind: Kind = Kind.CaseSet(enumSym)
+  }
+
+  /**
+    * A type constructor that converts a region to a Star type.
+    */
+  case object RegionToStar extends TypeConstructor {
+    /**
+      * The shape of a star-kind region is Region[l].
+      */
+    def kind: Kind = Kind.Bool ->: Kind.Star
   }
 
 }

@@ -14,7 +14,11 @@
  * limitations under the License.
  */
 
+use Fixpoint/Ast.Constraint
+
 namespace Fixpoint/Ram {
+
+    @Internal
     pub enum RamStmt[v] {
         case Insert(RelOp[v])
         case Merge(RamSym[v], RamSym[v])
@@ -25,30 +29,19 @@ namespace Fixpoint/Ram {
         case Comment(String)
     }
 
-    instance Monoid[RamStmt[v]] {
-        pub def empty(): RamStmt[v] = RamStmt.Seq(Nil)
-
-        pub def combine(x: RamStmt[v], y: RamStmt[v]): RamStmt[v] = match (x, y) {
-            case (RamStmt.Seq(xs), RamStmt.Seq(ys)) => RamStmt.Seq(xs ::: ys)
-            case (_, RamStmt.Seq(ys)) => RamStmt.Seq(x :: ys)
-            case (RamStmt.Seq(xs), _) => RamStmt.Seq(xs ::: y :: Nil)
-            case _ => RamStmt.Seq(x :: y :: Nil)
-        }
-    }
-
-    instance ToString[RamStmt[v]] with ToString[v] {
+    instance ToString[RamStmt[v]] {
         pub def toString(stmt: RamStmt[v]): String =
             let nl = String.lineSeparator();
             match stmt {
-                case Insert(op) => ToString.toString(op)
-                case Merge(src, dst) => "merge ${src} into ${dst}"
-                case Assign(lhs, rhs) => "${lhs} := ${rhs}"
-                case Purge(ramSym) => "purge ${ramSym}"
-                case Seq(xs) => List.map(ToString.toString, xs) |> String.intercalate(";${nl}")
-                case Until(test, body) =>
-                    let tst = List.map(ToString.toString, test) |> String.intercalate(" Λ ");
+                case RamStmt.Insert(op) => ToString.toString(op)
+                case RamStmt.Merge(src, dst) => "merge ${src} into ${dst}"
+                case RamStmt.Assign(lhs, rhs) => "${lhs} := ${rhs}"
+                case RamStmt.Purge(ramSym) => "purge ${ramSym}"
+                case RamStmt.Seq(xs) => List.join(";${nl}", xs)
+                case RamStmt.Until(test, body) =>
+                    let tst = test |> List.join(" Λ ");
                     "until(${tst}) do${nl}${String.indent(4, "${body}")}end"
-                case Comment(comment) => "// ${comment}"
+                case RamStmt.Comment(comment) => "// ${comment}"
             }
     }
 }

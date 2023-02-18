@@ -17,7 +17,7 @@
 ///
 /// A type class for negation.
 ///
-pub lawless class Neg[a] {
+pub class Neg[a] {
     ///
     /// Returns -`x`.
     ///
@@ -30,6 +30,10 @@ instance Neg[Float32] {
 
 instance Neg[Float64] {
     pub def neg(x: Float64): Float64 = $FLOAT64_NEG$(x)
+}
+
+instance Neg[BigDecimal] {
+    pub def neg(x: BigDecimal): BigDecimal = $BIGDECIMAL_NEG$(x)
 }
 
 instance Neg[Int8] {

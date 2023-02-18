@@ -16,7 +16,7 @@
 
 namespace TestBigInt {
 
-    use Mul.mul;
+    use Mul.mul
 
     /////////////////////////////////////////////////////////////////////////////
     // mul                                                                     //
@@ -81,6 +81,48 @@ namespace TestBigInt {
 
     @test
     def abs03(): Bool = BigInt.abs(-1ii) == 1ii
+
+    /////////////////////////////////////////////////////////////////////////////
+    // mod                                                                     //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def mod01(): Bool = (1200000000000000000000ii `BigInt.mod` 200000000000000000000ii) == 0ii
+
+    @test
+    def mod02(): Bool = (1200000000000000000000ii `BigInt.mod` 500000000000000000000ii) == 200000000000000000000ii
+
+    @test
+    def mod03(): Bool = (-1200000000000000000000ii `BigInt.mod` 500000000000000000000ii) == 300000000000000000000ii
+
+    @test
+    def mod04(): Bool = (1200000000000000000000ii `BigInt.mod` -500000000000000000000ii) == -300000000000000000000ii
+
+    @test
+    def mod05(): Bool = (-1200000000000000000000ii `BigInt.mod` -500000000000000000000ii) == -200000000000000000000ii
+
+    @test
+    def mod06(): Bool = (1ii `BigInt.mod` 0ii) == 0ii
+
+    /////////////////////////////////////////////////////////////////////////////
+    // rem                                                                     //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def rem01(): Bool = (1200000000000000000000ii `BigInt.rem` 200000000000000000000ii) == 0ii
+
+    @test
+    def rem02(): Bool = (1200000000000000000000ii `BigInt.rem` 500000000000000000000ii) == 200000000000000000000ii
+
+    @test
+    def rem03(): Bool = (-1200000000000000000000ii `BigInt.rem` 500000000000000000000ii) == -200000000000000000000ii
+
+    @test
+    def rem04(): Bool = (1200000000000000000000ii `BigInt.rem` -500000000000000000000ii) == 200000000000000000000ii
+
+    @test
+    def rem05(): Bool = (-1200000000000000000000ii `BigInt.rem` -500000000000000000000ii) == -200000000000000000000ii
+
+    @test
+    def rem06(): Bool = (1ii `BigInt.rem` 0ii) == 0ii
 
     /////////////////////////////////////////////////////////////////////////////
     // dist                                                                    //
@@ -410,28 +452,28 @@ namespace TestBigInt {
     // fromString                                                              //
     /////////////////////////////////////////////////////////////////////////////
     @test
-    def fromString01(): Bool = BigInt.fromString("Bad") |> Result.isErr
+    def fromString01(): Bool = BigInt.fromString("Bad") |> Option.isEmpty
 
     @test
-    def fromString02(): Bool = BigInt.fromString(" 1") == Ok(1ii)
+    def fromString02(): Bool = BigInt.fromString(" 1") == Some(1ii)
 
     @test
-    def fromString03(): Bool = BigInt.fromString("1 ") == Ok(1ii)
+    def fromString03(): Bool = BigInt.fromString("1 ") == Some(1ii)
 
     @test
-    def fromString04(): Bool = BigInt.fromString("0") == Ok(0ii)
+    def fromString04(): Bool = BigInt.fromString("0") == Some(0ii)
 
     @test
-    def fromString05(): Bool = BigInt.fromString("1") == Ok(1ii)
+    def fromString05(): Bool = BigInt.fromString("1") == Some(1ii)
 
     @test
-    def fromString06(): Bool = BigInt.fromString("-1") == Ok(-1ii)
+    def fromString06(): Bool = BigInt.fromString("-1") == Some(-1ii)
 
     @test
-    def fromString07(): Bool = BigInt.fromString("3498457932459234592873452983453245") == Ok(3498457932459234592873452983453245ii)
+    def fromString07(): Bool = BigInt.fromString("3498457932459234592873452983453245") == Some(3498457932459234592873452983453245ii)
 
     @test
-    def fromString08(): Bool = BigInt.fromString("-3498457932459234592873452983453245") == Ok(-3498457932459234592873452983453245ii)
+    def fromString08(): Bool = BigInt.fromString("-3498457932459234592873452983453245") == Some(-3498457932459234592873452983453245ii)
 
     /////////////////////////////////////////////////////////////////////////////
     // tryToInt8                                                               //
@@ -624,6 +666,18 @@ namespace TestBigInt {
             BigInt.tryToFloat64(min - 1ii)
         };
         step() == None
+
+    /////////////////////////////////////////////////////////////////////////////
+    // toBigDecimal                                                            //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def toBigDecimal01(): Bool = BigInt.toBigDecimal(0ii) == 0.0ff
+
+    @test
+    def toBigDecimal02(): Bool = BigInt.toBigDecimal(1ii) == 1.0ff
+
+    @test
+    def toBigDecimal03(): Bool = BigInt.toBigDecimal(-1ii) == -1.0ff
 
     /////////////////////////////////////////////////////////////////////////////
     // clampToInt8                                                             //

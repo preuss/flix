@@ -16,8 +16,9 @@
 
 package ca.uwaterloo.flix.language.ast
 
-import ca.uwaterloo.flix.api.Flix
-import ca.uwaterloo.flix.language.debug.FormatKind
+import ca.uwaterloo.flix.language.fmt.FormatKind
+
+import scala.annotation.tailrec
 
 /**
   * A kind represents the "type" of a type expression.
@@ -39,38 +40,31 @@ sealed trait Kind {
     */
   override def toString: String = FormatKind.formatKind(this)
 
-  /**
-    * Returns true if `left` is a subkind of `this`.
-    * Right-associative.
-    */
-  def <::(left: Kind): Boolean = (left, this) match {
-    // NB: identities first for performance
-    // identities
-    case (Kind.Star, Kind.Star) => true
-    case (Kind.Bool, Kind.Bool) => true
-    case (Kind.Record, Kind.Record) => true
-    case (Kind.Schema, Kind.Schema) => true
-
-    // kind vars
-    case (Kind.Var(_), _) => true
-    case (_, Kind.Var(_)) => true
-
-    // subkinds
-    case (Kind.Record, Kind.Star) => true
-    case (Kind.Schema, Kind.Star) => true
-
-    case (Kind.Arrow(k11, k12), Kind.Arrow(k21, k22)) => (k11 <:: k21) && (k12 <:: k22)
-    case _ => false
-  }
 
 }
 
 object Kind {
 
   /**
-    * Represents a kind variable.
+    * Represents a wild kind.
+    * A wild kind exists during the kinding phase, but should be eliminated before the following phase,
+    * unless the kind is deemed irrelevant (e.g. the kind of a wildcard type).
     */
-  case class Var(id: Int) extends Kind
+  case object Wild extends Kind
+
+  /**
+    * Represents the wildcard kind only matching Bool and Effect.
+    * A wild kind exists during the kinding phase, but should be eliminated before the following phase,
+    * unless the kind is deemed irrelevant (e.g. the kind of a wildcard type).
+    */
+  case object Beef extends Kind
+
+  /**
+    * Represents the wildcard kind only matching Case Sets.
+    * A wild kind exists during the kinding phase, but should be eliminated before the following phase,
+    * unless the kind is deemed irrelevant (e.g. the kind of a wildcard type).
+    */
+  case object WildCaseSet extends Kind
 
   /**
     * Represents the kind of types.
@@ -83,14 +77,29 @@ object Kind {
   case object Bool extends Kind
 
   /**
-    * Represents the kind of records.
+    * Represents the kind of effect sets.
     */
-  case object Record extends Kind
+  case object Effect extends Kind
 
   /**
-    * Represents the kind of schemas.
+    * Represents the kind of record rows.
     */
-  case object Schema extends Kind
+  case object RecordRow extends Kind
+
+  /**
+    * Represents the kind of schema rows.
+    */
+  case object SchemaRow extends Kind
+
+  /**
+    * Represents the kind of predicates.
+    */
+  case object Predicate extends Kind
+
+  /**
+    * Represents the kind of sets of restrictable enum cases.
+    */
+  case class CaseSet(sym: Symbol.RestrictableEnumSym) extends Kind
 
   /**
     * Represents the kind of type expressions `k1 -> k2`.
@@ -111,7 +120,7 @@ object Kind {
   }
 
   /**
-    * Returns the kind: k1 -> (k2 ... -> kn) for the given list of kinds `ks`.
+    * Returns the kind: k1 -> (k2 ... -> (kn -> *)) for the given list of kinds `ks`.
     */
   def mkArrow(ks: List[Kind]): Kind = ks match {
     case Nil => Star
@@ -119,8 +128,19 @@ object Kind {
   }
 
   /**
-    * Returns a fresh kind variable.
+    * Returns the base of an arrow kind.
     */
-  def freshVar()(implicit flix: Flix): Kind = Var(flix.genSym.freshId())
+  @tailrec
+  def base(k: Kind): Kind = k match {
+    case Arrow(k1, _) => base(k1)
+    case _ => k
+  }
 
+  /**
+    * Returns the arguments of an arrow kind.
+    */
+  def kindArgs(k: Kind): List[Kind] = k match {
+    case Arrow(k1, k2) => k1 :: kindArgs(k2)
+    case _ => Nil
+  }
 }

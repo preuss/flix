@@ -16,8 +16,8 @@
 package ca.uwaterloo.flix.api.lsp.provider
 
 import ca.uwaterloo.flix.api.lsp.{Entity, Index, Position, Range, TextEdit, WorkspaceEdit}
-import ca.uwaterloo.flix.language.ast.TypedAst.{Expression, Pattern, Root}
-import ca.uwaterloo.flix.language.ast.{Name, SourceLocation, Symbol, TypeConstructor}
+import ca.uwaterloo.flix.language.ast.TypedAst.{Pattern, Root}
+import ca.uwaterloo.flix.language.ast.{Ast, Name, SourceLocation, Symbol, Type, TypeConstructor}
 import org.json4s.JsonAST.JObject
 import org.json4s.JsonDSL._
 
@@ -32,47 +32,68 @@ object RenameProvider {
 
       case Some(entity) => entity match {
 
-        case Entity.Case(caze) => renameTag(caze.sym, caze.tag, newName)
+        case Entity.Case(caze) => renameCase(caze.sym, newName)
 
         case Entity.Def(defn) => renameDef(defn.sym, newName)
 
-        case Entity.Exp(exp) => exp match {
-          case Expression.Var(sym, _, _) => renameVar(sym, newName)
-          case Expression.Def(sym, _, _) => renameDef(sym, newName)
-          case Expression.Tag(sym, tag, _, _, _, _) => renameTag(sym, tag, newName)
-          case _ => mkNotFound(uri, pos)
-        }
+        case Entity.TypeAlias(alias) => renameTypeAlias(alias.sym, newName)
+
+        case Entity.VarUse(sym, _, _) => renameVar(sym, newName)
+
+        case Entity.DefUse(sym, _, _) => renameDef(sym, newName)
+
+        case Entity.CaseUse(sym, _, _) => renameCase(sym, newName)
+
+        case Entity.Exp(exp) => mkNotFound(uri, pos)
 
         case Entity.Field(field) => renameField(field, newName)
 
         case Entity.Pattern(pat) => pat match {
           case Pattern.Var(sym, _, _) => renameVar(sym, newName)
-          case Pattern.Tag(sym, tag, _, _, _) => renameTag(sym, tag, newName)
+          case Pattern.Tag(Ast.CaseSymUse(sym, _), _, _, _) => renameCase(sym, newName)
           case _ => mkNotFound(uri, pos)
         }
 
-        case Entity.Pred(pred) => renamePred(pred, newName)
+        case Entity.Pred(pred, _) => renamePred(pred, newName)
 
         case Entity.FormalParam(fparam) => renameVar(fparam.sym, newName)
 
         case Entity.LocalVar(sym, _) => renameVar(sym, newName)
 
-        case Entity.TypeCon(tc, _) => tc match {
-          case TypeConstructor.RecordExtend(field) => renameField(field, newName)
-          case TypeConstructor.SchemaExtend(pred) => renamePred(pred, newName)
-          case TypeConstructor.Enum(sym, _) => renameEnum(sym, newName)
+        case Entity.Type(t) => t match {
+          case Type.Cst(tc, _) => tc match {
+            case TypeConstructor.RecordRowExtend(field) => renameField(field, newName)
+            case TypeConstructor.SchemaRowExtend(pred) => renamePred(pred, newName)
+            case _ => mkNotFound(uri, pos)
+          }
+          case Type.Var(sym, loc) => renameTypeVar(sym, newName)
           case _ => mkNotFound(uri, pos)
         }
 
-        case _ => mkNotFound(uri, pos)
+        case Entity.Class(_) => mkNotFound(uri, pos)
+        case Entity.Effect(_) => mkNotFound(uri, pos)
+        case Entity.Enum(_) => mkNotFound(uri, pos)
+        case Entity.Op(_) => mkNotFound(uri, pos)
+        case Entity.OpUse(_, _, _) => mkNotFound(uri, pos)
+        case Entity.Sig(_) => mkNotFound(uri, pos)
+        case Entity.SigUse(_, _, _) => mkNotFound(uri, pos)
+        case Entity.TypeVar(_) => mkNotFound(uri, pos)
       }
     }
 
   }
 
-  private def rename(newName: String, occurrences: List[SourceLocation])(implicit index: Index, root: Root): JObject = {
+  /**
+    * Constructs the JSON response for renaming all `occurences` to `newName`.
+    *
+    * NB: The occurrences must *NOT* overlap nor be repeated. Hence they are a set.
+    */
+  private def rename(newName: String, occurrences: Set[SourceLocation])(implicit index: Index, root: Root): JObject = {
+    // Convert the set of occurrences to a sorted list.
+    val targets = occurrences.toList.sorted
+
     // Group by URI.
-    val groupedByUri = occurrences.groupBy(_.source.name)
+    val groupedByUri = targets.groupBy(_.source.name)
 
     // Construct text edits.
     val textEdits = groupedByUri map {
@@ -89,37 +110,49 @@ object RenameProvider {
   private def renameDef(sym: Symbol.DefnSym, newName: String)(implicit index: Index, root: Root): JObject = {
     val defn = sym.loc
     val uses = index.usesOf(sym)
-    rename(newName, defn :: uses.toList)
+    rename(newName, uses + defn)
   }
 
   private def renameEnum(sym: Symbol.EnumSym, newName: String)(implicit index: Index, root: Root): JObject = {
     val defn = sym.loc
     val uses = index.usesOf(sym)
-    rename(newName, defn :: uses.toList)
+    rename(newName, uses + defn)
+  }
+
+  private def renameTypeAlias(sym: Symbol.TypeAliasSym, newName: String)(implicit index: Index, root: Root): JObject = {
+    val defn = sym.loc
+    val uses = index.usesOf(sym)
+    rename(newName, uses + defn)
   }
 
   private def renameField(field: Name.Field, newName: String)(implicit index: Index, root: Root): JObject = {
     val defs = index.defsOf(field)
     val uses = index.usesOf(field)
-    rename(newName, (defs ++ uses).toList)
+    rename(newName, defs ++ uses)
   }
 
   private def renamePred(pred: Name.Pred, newName: String)(implicit index: Index, root: Root): JObject = {
     val defs = index.defsOf(pred)
     val uses = index.usesOf(pred)
-    rename(newName, (defs ++ uses).toList)
+    rename(newName, defs ++ uses)
   }
 
-  private def renameTag(sym: Symbol.EnumSym, tag: Name.Tag, newName: String)(implicit index: Index, root: Root): JObject = {
-    val defn = root.enums(sym).cases(tag).tag.loc
-    val uses = index.usesOf(sym, tag)
-    rename(newName, defn :: uses.toList)
+  private def renameCase(sym: Symbol.CaseSym, newName: String)(implicit index: Index, root: Root): JObject = {
+    val defn = sym.loc
+    val uses = index.usesOf(sym)
+    rename(newName, uses + defn)
+  }
+
+  private def renameTypeVar(sym: Symbol.KindedTypeVarSym, newName: String)(implicit index: Index, root: Root): JObject = {
+    val defn = sym.loc
+    val uses = index.usesOf(sym)
+    rename(newName, uses + defn)
   }
 
   private def renameVar(sym: Symbol.VarSym, newName: String)(implicit index: Index, root: Root): JObject = {
     val defn = sym.loc
     val uses = index.usesOf(sym)
-    rename(newName, defn :: uses.toList)
+    rename(newName, uses + defn)
   }
 
   /**

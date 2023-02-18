@@ -15,12 +15,12 @@
  */
 package ca.uwaterloo.flix.api.lsp
 
-import java.nio.file.{Path, Paths}
-
 import ca.uwaterloo.flix.util.Result
 import ca.uwaterloo.flix.util.Result.{Err, Ok}
 import org.json4s
 import org.json4s.JsonAST.{JString, JValue}
+
+import java.util.Base64
 
 /**
   * A common super-type for language server requests.
@@ -45,6 +45,26 @@ object Request {
   case class RemUri(requestId: String, uri: String) extends Request
 
   /**
+    * A request to add (or update) the package at the given uri with the given binary data.
+    */
+  case class AddPkg(requestId: String, uri: String, data: Array[Byte]) extends Request
+
+  /**
+    * A request to remove the package at the given uri.
+    */
+  case class RemPkg(requestId: String, uri: String) extends Request
+
+  /**
+    * A request to add (or update) the JAR at the given uri.
+    */
+  case class AddJar(requestId: String, uri: String) extends Request
+
+  /**
+    * A request to remove the package at the given uri.
+    */
+  case class RemJar(requestId: String, uri: String) extends Request
+
+  /**
     * A request for the compiler version.
     */
   case class Version(requestId: String) extends Request
@@ -53,21 +73,6 @@ object Request {
     * A request to shutdown the language server.
     */
   case class Shutdown(requestId: String) extends Request
-
-  /**
-    * A request to run all benchmarks using the added URIs.
-    */
-  case class RunBenchmarks(requestId: String) extends Request
-
-  /**
-    * A request to run main using the added URIs.
-    */
-  case class RunMain(requestId: String) extends Request
-
-  /**
-    * A request to run all tests using the added URIs.
-    */
-  case class RunTests(requestId: String) extends Request
 
   /**
     * A request to compile and check all source files.
@@ -80,9 +85,19 @@ object Request {
   case class Codelens(requestId: String, uri: String) extends Request
 
   /**
+    * A complete request.
+    */
+  case class Complete(requestId: String, uri: String, pos: Position) extends Request
+
+  /**
     * A request to go to a declaration.
     */
   case class Goto(requestId: String, uri: String, pos: Position) extends Request
+
+  /**
+    * A request to find implementations.
+    */
+  case class Implementation(requestId: String, uri: String, pos: Position) extends Request
 
   /**
     * A request to get highlight information.
@@ -105,39 +120,34 @@ object Request {
   case class Uses(requestId: String, uri: String, pos: Position) extends Request
 
   /**
-    * A request to run all benchmarks in the project.
+    * A request to get document symbols information.
     */
-  case class PackageBenchmark(requestId: String, projectRoot: Path) extends Request
+  case class DocumentSymbols(requestId: String, uri: String) extends Request
 
   /**
-    * A request to build the project.
-    */
-  case class PackageBuild(requestId: String, projectRoot: Path) extends Request
+   * A request to get semantic tokens for a file.
+   */
+  case class SemanticTokens(requestId: String, uri: String) extends Request
 
   /**
-    * A request to build the project documentation.
+    * A request to get workspace symbols information.
     */
-  case class PackageBuildDoc(requestId: String, projectRoot: Path) extends Request
+  case class WorkspaceSymbols(requestId: String, query: String) extends Request
 
   /**
-    * A request to build the JAR from the project.
+    * A request to get the inlay hints for the given [[range]] in a file denoted by [[uri]]
     */
-  case class PackageBuildJar(requestId: String, projectRoot: Path) extends Request
+  case class InlayHint(requestId: String, uri: String, range: Range) extends Request
 
   /**
-    * A request to build a Flix package from the project.
+    * A request to show the AST following a specific phase.
     */
-  case class PackageBuildPkg(requestId: String, projectRoot: Path) extends Request
+  case class ShowAst(requestId: String, phase: String) extends Request
 
   /**
-    * A request to init a new project.
+    * A request to get the ordered list of phases.
     */
-  case class PackageInit(requestId: String, projectRoot: Path) extends Request
-
-  /**
-    * A request to run all tests in the project.
-    */
-  case class PackageTest(requestId: String, projectRoot: Path) extends Request
+  case class ListPhases(requestId: String) extends Request
 
   /**
     * Tries to parse the given `json` value as a [[AddUri]] request.
@@ -152,6 +162,77 @@ object Request {
       uri <- parseUri(json)
       src <- srcRes
     } yield Request.AddUri(id, uri, src)
+  }
+
+  /**
+    * Tries to parse the given `json` value as a [[RemUri]] request.
+    */
+  def parseRemUri(json: json4s.JValue): Result[Request, String] = {
+    for {
+      id <- parseId(json)
+      uri <- parseUri(json)
+    } yield Request.RemUri(id, uri)
+  }
+
+  /**
+    * Tries to parse the given `json` value as a [[AddPkg]] request.
+    */
+  def parseAddPkg(json: json4s.JValue): Result[Request, String] = {
+    val base64Res: Result[String, String] = json \\ "base64" match {
+      case JString(s) => Ok(s)
+      case s => Err(s"Unexpected base64: '$s'.")
+    }
+
+    try {
+      for {
+        id <- parseId(json)
+        uri <- parseUri(json)
+        base64 <- base64Res
+      } yield {
+        val decoder = Base64.getDecoder
+        val data = decoder.decode(base64)
+        Request.AddPkg(id, uri, data)
+      }
+    } catch {
+      case ex: IllegalArgumentException => Result.Err(ex.getMessage)
+    }
+  }
+
+  /**
+    * Tries to parse the given `json` value as a [[RemPkg]] request.
+    */
+  def parseRemPkg(json: json4s.JValue): Result[Request, String] = {
+    for {
+      id <- parseId(json)
+      uri <- parseUri(json)
+    } yield Request.RemPkg(id, uri)
+  }
+
+
+  /**
+    * Tries to parse the given `json` value as a [[AddJar]] request.
+    */
+  def parseAddJar(json: json4s.JValue): Result[Request, String] = {
+    try {
+      for {
+        id <- parseId(json)
+        uri <- parseUri(json)
+      } yield {
+        Request.AddJar(id, uri)
+      }
+    } catch {
+      case ex: IllegalArgumentException => Result.Err(ex.getMessage)
+    }
+  }
+
+  /**
+    * Tries to parse the given `json` value as a [[RemJar]] request.
+    */
+  def parseRemJar(json: json4s.JValue): Result[Request, String] = {
+    for {
+      id <- parseId(json)
+      uri <- parseUri(json)
+    } yield Request.RemJar(id, uri)
   }
 
   /**
@@ -170,16 +251,6 @@ object Request {
     for {
       id <- parseId(json)
     } yield Request.Shutdown(id)
-  }
-
-  /**
-    * Tries to parse the given `json` value as a [[RemUri]] request.
-    */
-  def parseRemUri(json: json4s.JValue): Result[Request, String] = {
-    for {
-      id <- parseId(json)
-      uri <- parseUri(json)
-    } yield Request.RemUri(id, uri)
   }
 
   /**
@@ -202,6 +273,17 @@ object Request {
   }
 
   /**
+    * Tries to parse the given `json` value as a [[Complete]] request.
+    */
+  def parseComplete(json: json4s.JValue): Result[Request, String] = {
+    for {
+      id <- parseId(json)
+      uri <- parseUri(json)
+      pos <- Position.parse(json \\ "position")
+    } yield Request.Complete(id, uri, pos)
+  }
+
+  /**
     * Tries to parse the given `json` value as a [[Goto]] request.
     */
   def parseGoto(json: json4s.JValue): Result[Request, String] = {
@@ -210,6 +292,17 @@ object Request {
       uri <- parseUri(json)
       pos <- Position.parse(json \\ "position")
     } yield Request.Goto(id, uri, pos)
+  }
+
+  /**
+    * Tries to parse the given `json` value as a [[Implementation]] request.
+    */
+  def parseImplementation(json: JValue): Result[Request, String] = {
+    for {
+      id <- parseId(json)
+      uri <- parseUri(json)
+      pos <- Position.parse(json \\ "position")
+    } yield Request.Implementation(id, uri, pos)
   }
 
   /**
@@ -258,100 +351,41 @@ object Request {
   }
 
   /**
-    * Tries to parse the given `json` value as a [[RunBenchmarks]] request.
+    * Tries to parse the given `json` value as a [[DocumentSymbols]] request.
     */
-  def parseRunBenchmarks(json: json4s.JValue): Result[Request, String] = {
+  def parseDocumentSymbols(v: JValue): Result[Request, String] = {
     for {
-      id <- parseId(json)
-    } yield Request.RunBenchmarks(id)
+      id <- parseId(v)
+      uri <- parseUri(v)
+    } yield Request.DocumentSymbols(id, uri)
   }
 
   /**
-    * Tries to parse the given `json` value as a [[RunMain]] request.
+    * Tries to parse the given `json` value as a [[WorkspaceSymbols]] request.
     */
-  def parseRunMain(json: json4s.JValue): Result[Request, String] = {
+  def parseWorkspaceSymbols(v: JValue): Result[Request, String] = {
     for {
-      id <- parseId(json)
-    } yield Request.RunMain(id)
+      id <- parseId(v)
+      query <- parseString("query", v)
+    } yield Request.WorkspaceSymbols(id, query)
   }
 
   /**
-    * Tries to parse the given `json` value as a [[RunTests]] request.
-    */
-  def parseRunTests(json: json4s.JValue): Result[Request, String] = {
+   * Tries to parse the given `json` value as a [[SemanticTokens]] request.
+   */
+  def parseSemanticTokens(json: JValue): Result[Request, String] = {
     for {
       id <- parseId(json)
-    } yield Request.RunTests(id)
+      uri <- parseUri(json)
+    } yield Request.SemanticTokens(id, uri)
   }
 
-  /**
-    * Tries to parse the given `json` value as a [[PackageBenchmark]] request.
-    */
-  def parsePackageBenchmark(json: JValue): Result[Request, String] = {
+  def parseInlayHint(json: JValue): Result[Request, String] = {
     for {
       id <- parseId(json)
-      projectRoot <- parseProjectRootUri(json)
-    } yield Request.PackageBenchmark(id, Paths.get(projectRoot))
-  }
-
-  /**
-    * Tries to parse the given `json` value as a [[PackageBuild]] request.
-    */
-  def parsePackageBuild(json: JValue): Result[Request, String] = {
-    for {
-      id <- parseId(json)
-      projectRoot <- parseProjectRootUri(json)
-    } yield Request.PackageBuild(id, Paths.get(projectRoot))
-  }
-
-  /**
-    * Tries to parse the given `json` value as a [[PackageBuildDoc]] request.
-    */
-  def parsePackageBuildDoc(json: JValue): Result[Request, String] = {
-    for {
-      id <- parseId(json)
-      projectRoot <- parseProjectRootUri(json)
-    } yield Request.PackageBuildDoc(id, Paths.get(projectRoot))
-  }
-
-  /**
-    * Tries to parse the given `json` value as a [[PackageBuildJar]] request.
-    */
-  def parsePackageBuildJar(json: JValue): Result[Request, String] = {
-    for {
-      id <- parseId(json)
-      projectRoot <- parseProjectRootUri(json)
-    } yield Request.PackageBuildJar(id, Paths.get(projectRoot))
-  }
-
-  /**
-    * Tries to parse the given `json` value as a [[PackageBuildPkg]] request.
-    */
-  def parsePackageBuildPkg(json: JValue): Result[Request, String] = {
-    for {
-      id <- parseId(json)
-      projectRoot <- parseProjectRootUri(json)
-    } yield Request.PackageBuildPkg(id, Paths.get(projectRoot))
-  }
-
-  /**
-    * Tries to parse the given `json` value as a [[PackageInit]] request.
-    */
-  def parsePackageInit(json: JValue): Result[Request, String] = {
-    for {
-      id <- parseId(json)
-      projectRoot <- parseProjectRootUri(json)
-    } yield Request.PackageInit(id, Paths.get(projectRoot))
-  }
-
-  /**
-    * Tries to parse the given `json` value as a [[PackageTest]] request.
-    */
-  def parsePackageTest(json: JValue): Result[Request, String] = {
-    for {
-      id <- parseId(json)
-      projectRoot <- parseProjectRootUri(json)
-    } yield Request.PackageTest(id, Paths.get(projectRoot))
+      uri <- parseUri(json)
+      range <- Range.parse(json \\ "range")
+    } yield Request.InlayHint(id, uri, range)
   }
 
   /**

@@ -16,653 +16,837 @@
 
 namespace TestResult {
 
-    use Hash.hash;
-
-/////////////////////////////////////////////////////////////////////////////
-// isOk                                                                    //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def isOk01(): Bool = Result.isOk(Ok(1)) == true
+    use Hash.hash
 
-@test
-def isOk02(): Bool = Result.isOk(Err(1)) == false
-
-/////////////////////////////////////////////////////////////////////////////
-// isErr                                                                   //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def isErr01(): Bool = Result.isErr(Ok(1)) == false
 
-@test
-def isErr02(): Bool = Result.isErr(Err(1)) == true
+    /////////////////////////////////////////////////////////////////////////////
+    // Functor.map                                                             //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def functor_map01(): Bool = Functor.map(i -> i == 2, Err(-1ii)) == Err(-1ii)
 
-/////////////////////////////////////////////////////////////////////////////
-// getWithDefault                                                          //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def getWithDefault01(): Bool = Result.getWithDefault(Ok(1), 2) == 1
-
-@test
-def getWithDefault02(): Bool = Result.getWithDefault(Err(false), 2) == 2
+    @test
+    def functor_map02(): Bool = Functor.map(i -> i == 2, Ok(1)): Result[Unit, Bool] == Ok(false)
 
-/////////////////////////////////////////////////////////////////////////////
-// withDefault                                                             //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def withDefault01(): Bool = Result.withDefault(Ok(1), Ok(2)): Result[_, Unit] == Ok(1)
-
-@test
-def withDefault02(): Bool = Result.withDefault(Ok(1), Err(false)) == Ok(1)
-
-@test
-def withDefault03(): Bool = Result.withDefault(Err(false), Ok(2)): Result[_, Unit] == Ok(2)
+    @test
+    def functor_map03(): Bool = Functor.map(i -> i == 2, Ok(2)): Result[Unit, Bool] == Ok(true)
 
-@test
-def withDefault04(): Bool = Result.withDefault(Err(false), Err(true)): Result[Unit, _] == Err(true)
+    /////////////////////////////////////////////////////////////////////////////
+    // Monad.flatMap                                                           //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def monad_flatMap01(): Bool = Monad.flatMap(i -> if (i == 2) Ok(i) else Err(false), Err(true)) == Err(true)
 
-/////////////////////////////////////////////////////////////////////////////
-// replace                                                                 //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def replace01(): Bool = Result.replace(3, 4, Err(false)) == Err(false)
-
-@test
-def replace02(): Bool = Result.replace(3, 4, Ok(2): Result[_, Unit]) == Ok(2)
+    @test
+    def monad_flatMap02(): Bool = Monad.flatMap(i -> if (i == 2) Ok(i) else Err(false), Ok(1)) == Err(false)
 
-@test
-def replace03(): Bool = Result.replace(3, 4, Ok(3)): Result[_, Unit] == Ok(4)
+    @test
+    def monad_flatMap03(): Bool = Monad.flatMap(i -> if (i == 2) Ok(2*i) else Err(false), Ok(2)) == Ok(4)
 
-@test
-def replace04(): Bool = Result.replace(3, 4, Ok(4)): Result[_, Unit] == Ok(4)
+    /////////////////////////////////////////////////////////////////////////////
+    // Applicative.ap                                                          //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def applicative_ap01(): Bool = Applicative.ap(Ok(x -> x + 1), Ok(123)): Result[String, Int32] == Ok(124)
 
-/////////////////////////////////////////////////////////////////////////////
-// exists                                                                  //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def exists01(): Bool = Result.exists(i -> i == 2, Err(false)) == false
+    @test
+    def applicative_ap02(): Bool = Applicative.ap(Ok(x -> x + 1), Err("b")) == Err("b")
 
-@test
-def exists02(): Bool = Result.exists(i -> i == 2, Ok(1)) == false
+    @test
+    def applicative_ap03(): Bool = Applicative.ap(Err("a"), Ok(123)): Result[String, Int32] == Err("a")
 
-@test
-def exists03(): Bool = Result.exists(i -> i == 2, Ok(2)) == true
+    @test
+    def applicative_ap04(): Bool = Applicative.ap(Err("a"), Err("b")): Result[String, Int32] == Err("a")
 
-/////////////////////////////////////////////////////////////////////////////
-// forall                                                                  //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def forall01(): Bool = Result.forall(i -> i == 2, Err(false)) == true
+    /////////////////////////////////////////////////////////////////////////////
+    // isOk                                                                    //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def isOk01(): Bool = Result.isOk(Ok(1)) == true
 
-@test
-def forall02(): Bool = Result.forall(i -> i == 2, Ok(1)) == false
+    @test
+    def isOk02(): Bool = Result.isOk(Err(1)) == false
 
-@test
-def forall03(): Bool = Result.forall(i -> i == 2, Ok(2)) == true
+    /////////////////////////////////////////////////////////////////////////////
+    // isErr                                                                   //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def isErr01(): Bool = Result.isErr(Ok(1)) == false
 
-/////////////////////////////////////////////////////////////////////////////
-// map                                                                     //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def map01(): Bool = Result.map(i -> i == 2, Err(-1ii)) == Err(-1ii)
+    @test
+    def isErr02(): Bool = Result.isErr(Err(1)) == true
 
-@test
-def map02(): Bool = Result.map(i -> i == 2, Ok(1)): Result[_, Unit] == Ok(false)
+    /////////////////////////////////////////////////////////////////////////////
+    // getWithDefault                                                          //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def getWithDefault01(): Bool = Result.getWithDefault(2, Ok(1)) == 1
 
-@test
-def map03(): Bool = Result.map(i -> i == 2, Ok(2)): Result[_, Unit] == Ok(true)
+    @test
+    def getWithDefault02(): Bool = Result.getWithDefault(2, Err(false)) == 2
 
-/////////////////////////////////////////////////////////////////////////////
-// mapErr                                                                  //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def mapErr01(): Bool = Result.mapErr(i -> i == 2, Ok(1)) == Ok(1)
+    /////////////////////////////////////////////////////////////////////////////
+    // withDefault                                                             //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def withDefault01(): Bool = Result.withDefault({default = Ok(2)}, Ok(1)): Result[Unit, Int32] == Ok(1)
+
+    @test
+    def withDefault02(): Bool = Result.withDefault({default = Err(false)}, Ok(1)) == Ok(1)
+
+    @test
+    def withDefault03(): Bool = Result.withDefault({default = Ok(2)}, Err(false)): Result[Unit, Int32] == Ok(2)
+
+    @test
+    def withDefault04(): Bool = Result.withDefault({default = Err(true)}, Err(false)): Result[Bool, Unit] == Err(true)
+
+    /////////////////////////////////////////////////////////////////////////////
+    // replace                                                                 //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def replace01(): Bool = Result.replace(from = 3, to = 4, Err(false)) == Err(false)
+
+    @test
+    def replace02(): Bool = Result.replace(from = 3, to = 4, Ok(2): Result[Unit, Int32]) == Ok(2)
+
+    @test
+    def replace03(): Bool = Result.replace(from = 3, to = 4, Ok(3)): Result[Unit, Int32] == Ok(4)
 
-@test
-def mapErr02(): Bool = Result.mapErr(i -> i == 2, Err(1)): Result[Unit, _] == Err(false)
+    @test
+    def replace04(): Bool = Result.replace(from = 3, to = 4, Ok(4)): Result[Unit, Int32] == Ok(4)
 
-@test
-def mapErr03(): Bool = Result.mapErr(i -> i == 2, Err(2)): Result[Unit, _] == Err(true)
+    /////////////////////////////////////////////////////////////////////////////
+    // exists                                                                  //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def exists01(): Bool = Result.exists(i -> i == 2, Err(false)) == false
 
-/////////////////////////////////////////////////////////////////////////////
-// flatMap                                                                 //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def flatMap01(): Bool = Result.flatMap(i -> if (i == 2) Ok(i) else Err(false), Err(true)) == Err(true)
+    @test
+    def exists02(): Bool = Result.exists(i -> i == 2, Ok(1)) == false
 
-@test
-def flatMap02(): Bool = Result.flatMap(i -> if (i == 2) Ok(i) else Err(false), Ok(1)) == Err(false)
+    @test
+    def exists03(): Bool = Result.exists(i -> i == 2, Ok(2)) == true
 
-@test
-def flatMap03(): Bool = Result.flatMap(i -> if (i == 2) Ok(2*i) else Err(false), Ok(2)) == Ok(4)
+    /////////////////////////////////////////////////////////////////////////////
+    // forAll                                                                  //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def forAll01(): Bool = Result.forAll(i -> i == 2, Err(false)) == true
 
-/////////////////////////////////////////////////////////////////////////////
-// count                                                                   //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def count01(): Bool = Result.count(i -> i == 2, Err(false)) == 0
+    @test
+    def forAll02(): Bool = Result.forAll(i -> i == 2, Ok(1)) == false
 
-@test
-def count02(): Bool = Result.count(i -> i == 2, Ok(1)) == 0
+    @test
+    def forAll03(): Bool = Result.forAll(i -> i == 2, Ok(2)) == true
 
-@test
-def count03(): Bool = Result.count(i -> i == 2, Ok(2)) == 1
+    /////////////////////////////////////////////////////////////////////////////
+    // map                                                                     //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def map01(): Bool = Result.map(i -> i == 2, Err(-1ii)) == Err(-1ii)
 
-/////////////////////////////////////////////////////////////////////////////
-// find                                                                    //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def find01(): Bool = Result.find(i -> i == 2, Err(false)) == None
+    @test
+    def map02(): Bool = Result.map(i -> i == 2, Ok(1)): Result[Unit, Bool] == Ok(false)
 
-@test
-def find02(): Bool = Result.find(i -> i == 2, Ok(1)) == None
+    @test
+    def map03(): Bool = Result.map(i -> i == 2, Ok(2)): Result[Unit, Bool] == Ok(true)
 
-@test
-def find03(): Bool = Result.find(i -> i == 2, Ok(2)) == Some(2)
+    /////////////////////////////////////////////////////////////////////////////
+    // mapErr                                                                  //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def mapErr01(): Bool = Result.mapErr(i -> i == 2, Ok(1)) == Ok(1)
 
-/////////////////////////////////////////////////////////////////////////////
-// foldLeft                                                                //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def foldLeft01(): Bool = Result.foldLeft((b, i) -> if (i == 2 and b) true else false, false, Err(-1ii)) == false
+    @test
+    def mapErr02(): Bool = Result.mapErr(i -> i == 2, Err(1)): Result[Bool, Unit] == Err(false)
 
-@test
-def foldLeft02(): Bool = Result.foldLeft((b, i) -> if (i == 2 and b) true else false, false, Ok(1)) == false
+    @test
+    def mapErr03(): Bool = Result.mapErr(i -> i == 2, Err(2)): Result[Bool, Unit] == Err(true)
 
-@test
-def foldLeft03(): Bool = Result.foldLeft((b, i) -> if (i == 2 and b) true else false, true, Ok(1)) == false
+    /////////////////////////////////////////////////////////////////////////////
+    // flatMap                                                                 //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def flatMap01(): Bool = Result.flatMap(i -> if (i == 2) Ok(i) else Err(false), Err(true)) == Err(true)
 
-@test
-def foldLeft04(): Bool = Result.foldLeft((b, i) -> if (i == 2 and b) true else false, false, Ok(2)) == false
+    @test
+    def flatMap02(): Bool = Result.flatMap(i -> if (i == 2) Ok(i) else Err(false), Ok(1)) == Err(false)
 
-@test
-def foldLeft05(): Bool = Result.foldLeft((b, i) -> if (i == 2 and b) true else false, true, Ok(2)) == true
+    @test
+    def flatMap03(): Bool = Result.flatMap(i -> if (i == 2) Ok(2*i) else Err(false), Ok(2)) == Ok(4)
 
-/////////////////////////////////////////////////////////////////////////////
-// foldRight                                                               //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def foldRight01(): Bool = Result.foldRight((i, b) -> if (i == 2 and b) true else false, Err(-1ii), false) == false
 
-@test
-def foldRight02(): Bool = Result.foldRight((i, b) -> if (i == 2 and b) true else false, Ok(1), false) == false
+    /////////////////////////////////////////////////////////////////////////////
+    // flatten                                                                 //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def flatten01(): Bool = {
+        let err: Result[Int32, Unit] = Err(42);
+        Result.flatten(Ok(err)) == Err(42)
+    }
 
-@test
-def foldRight03(): Bool = Result.foldRight((i, b) -> if (i == 2 and b) true else false, Ok(1), true) == false
+    @test
+    def flatten02(): Bool = {
+        let err: Result[Int32, Result[Int32, Int32]] = Err(42);
+        Result.flatten(err) == Err(42)
+    }
 
-@test
-def foldRight04(): Bool = Result.foldRight((i, b) -> if (i == 2 and b) true else false, Ok(2), false) == false
+    @test
+    def flatten03(): Bool = {
+        let err: Result[Int32, Result[Int32, Int32]] = Ok(Ok(42));
+        Result.flatten(err) == Ok(42)
+    }
 
-@test
-def foldRight05(): Bool = Result.foldRight((i, b) -> if (i == 2 and b) true else false, Ok(2), true) == true
+    /////////////////////////////////////////////////////////////////////////////
+    // count                                                                   //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def count01(): Bool = Result.count(i -> i == 2, Err(false)) == 0
 
-/////////////////////////////////////////////////////////////////////////////
-// sequence                                                                //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def sequence01(): Bool = Result.sequence(Nil): Result[List[Unit], Unit] == Ok(Nil)
+    @test
+    def count02(): Bool = Result.count(i -> i == 2, Ok(1)) == 0
 
-@test
-def sequence02(): Bool = Result.sequence(Ok(1) :: Nil): Result[_, Unit] == Ok(1 :: Nil)
+    @test
+    def count03(): Bool = Result.count(i -> i == 2, Ok(2)) == 1
 
-@test
-def sequence03(): Bool = Result.sequence(Ok(1) :: Ok(2) :: Nil): Result[_, Unit] == Ok(1 :: 2 :: Nil)
 
-@test
-def sequence04(): Bool = Result.sequence(Ok(1) :: Ok(2) :: Ok(3) :: Nil): Result[_, Unit] == Ok(1 :: 2 :: 3 :: Nil)
+    /////////////////////////////////////////////////////////////////////////////
+    // sum                                                                     //
+    /////////////////////////////////////////////////////////////////////////////
 
-@test
-def sequence05(): Bool = Result.sequence(Err("one") :: Ok(2) :: Ok(3) :: Nil) == Err("one")
+    @test
+    def sum01(): Bool = Result.sum(Err(false)) == 0
 
-@test
-def sequence06(): Bool = Result.sequence(Ok(1) :: Ok(2) :: Err("three") :: Nil) == Err("three")
+    @test
+    def sum02(): Bool = Result.sum(Ok(1)) == 1
 
-@test
-def sequence07(): Bool = Result.sequence(Ok(1) :: Err("two") :: Ok(3) :: Nil) == Err("two")
+    @test
+    def sum03(): Bool = Result.sum(Ok(-2)) == -2
 
-/////////////////////////////////////////////////////////////////////////////
-// traverse                                                                //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def traverse01(): Bool = Result.traverse(x -> Ok(x + 1), Nil): Result[_, Unit] == Ok(Nil)
 
-@test
-def traverse02(): Bool = Result.traverse(x -> Ok(x + 1), 1 :: Nil): Result[_, Unit] == Ok(2 :: Nil)
+    /////////////////////////////////////////////////////////////////////////////
+    // sumWith                                                                 //
+    /////////////////////////////////////////////////////////////////////////////
 
-@test
-def traverse03(): Bool = Result.traverse(x -> Ok(x + 1), 1 :: 2 :: Nil): Result[_, Unit] == Ok(2 :: 3 :: Nil)
+    @test
+    def sumWith01(): Bool = Result.sumWith(x -> x + 1, Err(false)) == 0
 
-@test
-def traverse04(): Bool = Result.traverse(x -> Ok(x + 1), 1 :: 2 :: 3 :: Nil): Result[_, Unit] == Ok(2 :: 3 :: 4 :: Nil)
+    @test
+    def sumWith02(): Bool = Result.sumWith(x -> x + 1, Ok(1)) == 2
 
-@test
-def traverse05(): Bool = Result.traverse(x -> if (x == 1) Err("one") else Ok(x), 1 :: 2 :: 3 :: Nil) == Err("one")
+    @test
+    def sumWith03(): Bool = Result.sumWith(x -> x + 1, Ok(-2)) == -1
 
-@test
-def traverse06(): Bool = Result.traverse(x -> if (x == 3) Err("three") else Ok(x), 1 :: 2 :: 3 :: Nil) == Err("three")
 
-@test
-def traverse07(): Bool = Result.traverse(x -> if (x == 2) Err("two") else Ok(x), 1 :: 2 :: 3 :: Nil) == Err("two")
+    /////////////////////////////////////////////////////////////////////////////
+    // product                                                                 //
+    /////////////////////////////////////////////////////////////////////////////
 
-@test
-def traverse08(): Bool = Result.traverse(_ -> Ok(42), 1 :: 2 :: 3 :: Nil): Result[_, Unit] == Ok(42 :: 42 :: 42 :: Nil)
+    @test
+    def product01(): Bool = Result.product(Err(false)) == 1
 
-/////////////////////////////////////////////////////////////////////////////
-// traverseX                                                               //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def traverseX01(): Bool = Result.traverseX(x -> Ok(x + 1), Nil): Result[_, Unit] == Ok()
+    @test
+    def product02(): Bool = Result.product(Ok(1)) == 1
 
-@test
-def traverseX02(): Bool = Result.traverseX(x -> Ok(x + 1), 1 :: Nil): Result[_, Unit] == Ok()
+    @test
+    def product03(): Bool = Result.product(Ok(-2)) == -2
 
-@test
-def traverseX03(): Bool = Result.traverseX(x -> Ok(x + 1), 1 :: 2 :: Nil): Result[_, Unit] == Ok()
 
-@test
-def traverseX04(): Bool = Result.traverseX(x -> Ok(x + 1), 1 :: 2 :: 3 :: Nil): Result[_, Unit] == Ok()
+    /////////////////////////////////////////////////////////////////////////////
+    // productWith                                                             //
+    /////////////////////////////////////////////////////////////////////////////
 
-@test
-def traverseX05(): Bool = Result.traverseX(x -> if (x == 1) Err("one") else Ok(x), 1 :: 2 :: 3 :: Nil) == Err("one")
+    @test
+    def productWith01(): Bool = Result.productWith(x -> x + 1, Err(false)) == 1
 
-@test
-def traverseX06(): Bool = Result.traverseX(x -> if (x == 3) Err("three") else Ok(x), 1 :: 2 :: 3 :: Nil) == Err("three")
+    @test
+    def productWith02(): Bool = Result.productWith(x -> x + 1, Ok(1)) == 2
 
-@test
-def traverseX07(): Bool = Result.traverseX(x -> if (x == 2) Err("two") else Ok(x), 1 :: 2 :: 3 :: Nil) == Err("two")
+    @test
+    def productWith03(): Bool = Result.productWith(x -> x + 1, Ok(-2)) == -1
 
-@test
-def traverseX08(): Bool = Result.traverseX(_ -> Ok(42), 1 :: 2 :: 3 :: Nil): Result[_, Unit] == Ok()
 
-/////////////////////////////////////////////////////////////////////////////
-// foldLeftM                                                               //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def foldLeftM01(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, Nil) == Ok(0)
+    /////////////////////////////////////////////////////////////////////////////
+    // find                                                                    //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def find01(): Bool = Result.find(i -> i == 2, Err(false)) == None
 
-@test
-def foldLeftM02(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: Nil) == Ok(1)
+    @test
+    def find02(): Bool = Result.find(i -> i == 2, Ok(1)) == None
 
-@test
-def foldLeftM03(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: 2 :: Nil) == Ok(2)
+    @test
+    def find03(): Bool = Result.find(i -> i == 2, Ok(2)) == Some(2)
 
-@test
-def foldLeftM04(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: 2 :: 3 :: Nil) == Ok(3)
+    /////////////////////////////////////////////////////////////////////////////
+    // foldLeft                                                                //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def foldLeft01(): Bool = Result.foldLeft((b, i) -> if (i == 2 and b) true else false, false, Err(-1ii)) == false
 
-@test
-def foldLeftM05(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, -1 :: 2 :: 3 :: Nil) == Err(-1)
+    @test
+    def foldLeft02(): Bool = Result.foldLeft((b, i) -> if (i == 2 and b) true else false, false, Ok(1)) == false
 
-@test
-def foldLeftM06(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: -2 :: 3 :: Nil) == Err(-1)
+    @test
+    def foldLeft03(): Bool = Result.foldLeft((b, i) -> if (i == 2 and b) true else false, true, Ok(1)) == false
 
-@test
-def foldLeftM07(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: 2 :: -3 :: Nil) == Err(-1)
+    @test
+    def foldLeft04(): Bool = Result.foldLeft((b, i) -> if (i == 2 and b) true else false, false, Ok(2)) == false
 
-/////////////////////////////////////////////////////////////////////////////
-// foldRightM                                                              //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def foldRightM01(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, Nil) == Ok(0)
+    @test
+    def foldLeft05(): Bool = Result.foldLeft((b, i) -> if (i == 2 and b) true else false, true, Ok(2)) == true
 
-@test
-def foldRightM02(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: Nil) == Ok(1)
+    /////////////////////////////////////////////////////////////////////////////
+    // foldRight                                                               //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def foldRight01(): Bool = Result.foldRight((i, acc) -> if (i == 2 and acc) true else false, false, Err(-1ii)) == false
 
-@test
-def foldRightM03(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: 2 :: Nil) == Ok(2)
+    @test
+    def foldRight02(): Bool = Result.foldRight((i, acc) -> if (i == 2 and acc) true else false, false, Ok(1)) == false
 
-@test
-def foldRightM04(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: 2 :: 3 :: Nil) == Ok(3)
+    @test
+    def foldRight03(): Bool = Result.foldRight((i, acc) -> if (i == 2 and acc) true else false, true, Ok(1)) == false
 
-@test
-def foldRightM05(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, -1 :: 2 :: 3 :: Nil) == Err(-1)
+    @test
+    def foldRight04(): Bool = Result.foldRight((i, acc) -> if (i == 2 and acc) true else false, false, Ok(2)) == false
 
-@test
-def foldRightM06(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: -2 :: 3 :: Nil) == Err(-1)
+    @test
+    def foldRight05(): Bool = Result.foldRight((i, acc) -> if (i == 2 and acc) true else false, true, Ok(2)) == true
 
-@test
-def foldRightM07(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: 2 :: -3 :: Nil) == Err(-1)
+    /////////////////////////////////////////////////////////////////////////////
+    // foldRightWithCont                                                       //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def foldRightWithCont01(): Bool = Result.foldRightWithCont((i, k) -> if (i == 2 and k()) true else false, false, Err(-1ii)) == false
 
-/////////////////////////////////////////////////////////////////////////////
-// toList                                                                  //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def toList01(): Bool = Result.toList(Err(-1ii): Result[Unit, _]) == Nil
+    @test
+    def foldRightWithCont02(): Bool = Result.foldRightWithCont((i, k) -> if (i == 2 and k()) true else false, false, Ok(1)) == false
 
-@test
-def toList02(): Bool = Result.toList(Ok(1)) == 1 :: Nil
+    @test
+    def foldRightWithCont03(): Bool = Result.foldRightWithCont((i, k) -> if (i == 2 and k()) true else false, true, Ok(1)) == false
 
-/////////////////////////////////////////////////////////////////////////////
-// toSet                                                                   //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def toSet01(): Bool = Result.toSet(Err(-1ii): Result[Unit, _]) == Set#{}
+    @test
+    def foldRightWithCont04(): Bool = Result.foldRightWithCont((i, k) -> if (i == 2 and k()) true else false, false, Ok(2)) == false
 
-@test
-def toSet02(): Bool = Result.toSet(Ok(1)) == Set#{1}
+    @test
+    def foldRightWithCont05(): Bool = Result.foldRightWithCont((i, k) -> if (i == 2 and k()) true else false, true, Ok(2)) == true
 
-/////////////////////////////////////////////////////////////////////////////
-// toMap                                                                   //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def toMap01(): Bool = Result.toMap(Err(-1ii): Result[(Unit, Unit), _]) == Map#{}
 
-@test
-def toMap02(): Bool = Result.toMap(Ok((1, true))) == Map#{1 -> true}
+    /////////////////////////////////////////////////////////////////////////////
+    // sequence                                                                //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def sequence01(): Bool = Result.sequence(Nil): Result[Unit, List[Unit]] == Ok(Nil)
 
-/////////////////////////////////////////////////////////////////////////////
-// toOption                                                                //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def toOption01(): Bool = Result.toOption(Err(-1ii): Result[Unit, _]) == None
+    @test
+    def sequence02(): Bool = Result.sequence(Ok(1) :: Nil): Result[Unit, List[Int32]] == Ok(1 :: Nil)
 
-@test
-def toOption02(): Bool = Result.toOption(Ok(1)) == Some(1)
+    @test
+    def sequence03(): Bool = Result.sequence(Ok(1) :: Ok(2) :: Nil): Result[Unit, List[Int32]] == Ok(1 :: 2 :: Nil)
 
-/////////////////////////////////////////////////////////////////////////////
-// foreach                                                                 //
-/////////////////////////////////////////////////////////////////////////////
+    @test
+    def sequence04(): Bool = Result.sequence(Ok(1) :: Ok(2) :: Ok(3) :: Nil): Result[Unit, List[Int32]] == Ok(1 :: 2 :: 3 :: Nil)
 
-@test
-def foreach01(): Bool & Impure =
-    let r = ref 21;
-    Result.foreach(x -> r := x, Ok(42): Result[Int, Int]);
-    42 == deref r
+    @test
+    def sequence05(): Bool = Result.sequence(Err("one") :: Ok(2) :: Ok(3) :: Nil) == Err("one")
 
-@test
-def foreach02(): Bool & Impure =
-    let r = ref 21;
-    Result.foreach(x -> r := x, Err(42): Result[Int, Int]);
-    21 == deref r
+    @test
+    def sequence06(): Bool = Result.sequence(Ok(1) :: Ok(2) :: Err("three") :: Nil) == Err("three")
 
-/////////////////////////////////////////////////////////////////////////////
-// ap                                                                      //
-/////////////////////////////////////////////////////////////////////////////
-@test
-def ap01(): Bool = Result.ap(Ok(x -> x + 1), Ok(123)): Result[_, Unit] == Ok(124)
+    @test
+    def sequence07(): Bool = Result.sequence(Ok(1) :: Err("two") :: Ok(3) :: Nil) == Err("two")
 
-@test
-def ap02(): Bool = Result.ap(Ok(x -> x + 1), Err("b")) == Err("b")
+    /////////////////////////////////////////////////////////////////////////////
+    // traverse                                                                //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def traverse01(): Bool = Result.traverse(x -> Ok(x + 1), Nil): Result[Unit, List[Int32]] == Ok(Nil)
 
-@test
-def ap03(): Bool = Result.ap(Err("a"), Ok(123)): Result[Int32, _] == Err("a")
+    @test
+    def traverse02(): Bool = Result.traverse(x -> Ok(x + 1), 1 :: Nil): Result[Unit, List[Int32]] == Ok(2 :: Nil)
 
-@test
-def ap04(): Bool = Result.ap(Err("a"), Err("b")): Result[Unit, _] == Err("a")
+    @test
+    def traverse03(): Bool = Result.traverse(x -> Ok(x + 1), 1 :: 2 :: Nil): Result[Unit, List[Int32]] == Ok(2 :: 3 :: Nil)
 
-/////////////////////////////////////////////////////////////////////////////
-// lift2                                                                   //
-/////////////////////////////////////////////////////////////////////////////
+    @test
+    def traverse04(): Bool = Result.traverse(x -> Ok(x + 1), 1 :: 2 :: 3 :: Nil): Result[Unit, List[Int32]] == Ok(2 :: 3 :: 4 :: Nil)
 
-@test
-def lift201(): Bool = Result.lift2((x1,x2) -> x1 + x2, Ok(123), Ok(1)): Result[_, Unit] == Ok(124)
+    @test
+    def traverse05(): Bool = Result.traverse(x -> if (x == 1) Err("one") else Ok(x), 1 :: 2 :: 3 :: Nil) == Err("one")
 
-@test
-def lift202(): Bool = Result.lift2((x1,x2) -> x1 + x2, Ok(123), Err("e1")) == Err("e1")
+    @test
+    def traverse06(): Bool = Result.traverse(x -> if (x == 3) Err("three") else Ok(x), 1 :: 2 :: 3 :: Nil) == Err("three")
 
-@test
-def lift203(): Bool = Result.lift2((x1,x2) -> x1 + x2, Err("e1"), Ok(1)) == Err("e1")
+    @test
+    def traverse07(): Bool = Result.traverse(x -> if (x == 2) Err("two") else Ok(x), 1 :: 2 :: 3 :: Nil) == Err("two")
 
-@test
-def lift204(): Bool = Result.lift2((x1,x2) -> x1 + x2, Err("e1"), Err("e2"): Result[Int32, String]) == Err("e1")
+    @test
+    def traverse08(): Bool = Result.traverse(_ -> Ok(42), 1 :: 2 :: 3 :: Nil): Result[Unit, List[Int32]] == Ok(42 :: 42 :: 42 :: Nil)
 
-/////////////////////////////////////////////////////////////////////////////
-// lift3                                                                   //
-/////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////
+    // traverseX                                                               //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def traverseX01(): Bool = Result.traverseX(x -> Ok(x + 1), Nil): Result[String, Unit] == Ok()
 
-@test
-def lift301(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Ok(123), Ok(1), Ok(2)): Result[_, Unit] == Ok(126)
+    @test
+    def traverseX02(): Bool = Result.traverseX(x -> Ok(x + 1), 1 :: Nil): Result[String, Unit] == Ok()
 
-@test
-def lift302(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Ok(123), Ok(1), Err("e1")) == Err("e1")
+    @test
+    def traverseX03(): Bool = Result.traverseX(x -> Ok(x + 1), 1 :: 2 :: Nil): Result[String, Unit] == Ok()
 
-@test
-def lift303(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Ok(123), Err("e1"), Ok(2)) == Err("e1")
+    @test
+    def traverseX04(): Bool = Result.traverseX(x -> Ok(x + 1), 1 :: 2 :: 3 :: Nil): Result[String, Unit] == Ok()
 
-@test
-def lift304(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Err("e1"), Ok(1), Ok(2)) == Err("e1")
+    @test
+    def traverseX05(): Bool = Result.traverseX(x -> if (x == 1) Err("one") else Ok(x), 1 :: 2 :: 3 :: Nil) == Err("one")
 
-@test
-def lift305(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Ok(123), Err("e1"), Err("e2")) == Err("e1")
+    @test
+    def traverseX06(): Bool = Result.traverseX(x -> if (x == 3) Err("three") else Ok(x), 1 :: 2 :: 3 :: Nil) == Err("three")
 
-@test
-def lift306(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Err("e1"), Ok(1), Err("e2")) == Err("e1")
+    @test
+    def traverseX07(): Bool = Result.traverseX(x -> if (x == 2) Err("two") else Ok(x), 1 :: 2 :: 3 :: Nil) == Err("two")
 
-@test
-def lift307(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Err("e1"), Err("e2"), Err("e3"): Result[Int32, String]) == Err("e1")
+    @test
+    def traverseX08(): Bool = Result.traverseX(_ -> Ok(42), 1 :: 2 :: 3 :: Nil): Result[String, Unit] == Ok()
 
-/////////////////////////////////////////////////////////////////////////////
-// lift4                                                                   //
-/////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////
+    // foldLeftM                                                               //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def foldLeftM01(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, Nil) == Ok(0)
 
-@test
-def lift401(): Bool = Result.lift4((x1,x2,x3,x4) -> x1 + x2 + x3 + x4, Ok(123), Ok(1), Ok(2), Ok(3)): Result[_, Unit] == Ok(129)
+    @test
+    def foldLeftM02(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: Nil) == Ok(1)
 
-@test
-def lift402(): Bool = Result.lift4((x1,x2,x3,x4) -> x1 + x2 + x3 + x4, Ok(123), Ok(1), Ok(2), Err("e1")) == Err("e1")
+    @test
+    def foldLeftM03(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: 2 :: Nil) == Ok(2)
 
-@test
-def lift403(): Bool = Result.lift4((x1,x2,x3,x4) -> x1 + x2 + x3 + x4, Ok(123), Ok(1), Err("e1"), Ok(3)) == Err("e1")
+    @test
+    def foldLeftM04(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: 2 :: 3 :: Nil) == Ok(3)
 
-@test
-def lift404(): Bool = Result.lift4((x1,x2,x3,x4) -> x1 + x2 + x3 + x4, Ok(123), Err("e1"), Ok(2), Ok(3)) == Err("e1")
+    @test
+    def foldLeftM05(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, -1 :: 2 :: 3 :: Nil) == Err(-1)
 
-@test
-def lift405(): Bool = Result.lift4((x1,x2,x3,x4) -> x1 + x2 + x3 + x4, Err("e1"), Ok(1), Ok(2), Ok(3)) == Err("e1")
+    @test
+    def foldLeftM06(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: -2 :: 3 :: Nil) == Err(-1)
 
-@test
-def lift406(): Bool = Result.lift4((x1,x2,x3,x4) -> x1 + x2 + x3 + x4, Err("e1"), Err("e2"), Err("e3"), Err("e4"): Result[Int32, String]) == Err("e1")
+    @test
+    def foldLeftM07(): Bool = Result.foldLeftM((ac, i) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: 2 :: -3 :: Nil) == Err(-1)
 
-/////////////////////////////////////////////////////////////////////////////
-// lift5                                                                   //
-/////////////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////////////
+    // foldRightM                                                              //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def foldRightM01(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, Nil) == Ok(0)
 
-@test
-def lift501(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4)): Result[_, Unit] == Ok(133)
+    @test
+    def foldRightM02(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: Nil) == Ok(1)
 
-@test
-def lift502(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Ok(123), Ok(1), Ok(2), Ok(3), Err("e1")) == Err("e1")
+    @test
+    def foldRightM03(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: 2 :: Nil) == Ok(2)
 
-@test
-def lift503(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Ok(123), Ok(1), Ok(2), Err("e1"), Ok(4)) == Err("e1")
+    @test
+    def foldRightM04(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: 2 :: 3 :: Nil) == Ok(3)
 
-@test
-def lift504(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Ok(123), Ok(1), Err("e1"), Ok(3), Ok(4)) == Err("e1")
+    @test
+    def foldRightM05(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, -1 :: 2 :: 3 :: Nil) == Err(-1)
 
-@test
-def lift505(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Ok(123), Err("e1"), Ok(2), Ok(3), Ok(4)) == Err("e1")
+    @test
+    def foldRightM06(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: -2 :: 3 :: Nil) == Err(-1)
 
-@test
-def lift506(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Err("e1"), Ok(1), Ok(2), Ok(3), Ok(4)) == Err("e1")
+    @test
+    def foldRightM07(): Bool = Result.foldRightM((i, ac) -> if (i < 0) Err(-1) else Ok(Int32.max(i, ac)), 0, 1 :: 2 :: -3 :: Nil) == Err(-1)
 
-@test
-def lift507(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Err("e1"), Err("e2"), Err("e3"), Err("e4"), Err("e5"): Result[Int32, String]) == Err("e1")
+    /////////////////////////////////////////////////////////////////////////////
+    // toList                                                                  //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def toList01(): Bool = Result.toList(Err(-1ii): Result[BigInt, Unit]) == Nil
 
-/////////////////////////////////////////////////////////////////////////////
-// lift6                                                                   //
-/////////////////////////////////////////////////////////////////////////////
+    @test
+    def toList02(): Bool = Result.toList(Ok(1)) == 1 :: Nil
 
-@test
-def lift601(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5)): Result[_, Unit] == Ok(138)
+    /////////////////////////////////////////////////////////////////////////////
+    // toSet                                                                   //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def toSet01(): Bool = Result.toSet(Err(-1ii): Result[BigInt, Unit]) == Set#{}
 
-@test
-def lift602(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Err("e1")) == Err("e1")
+    @test
+    def toSet02(): Bool = Result.toSet(Ok(1)) == Set#{1}
 
-@test
-def lift603(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Ok(123), Ok(1), Ok(2), Ok(3), Err("e1"), Ok(5)) == Err("e1")
+    /////////////////////////////////////////////////////////////////////////////
+    // toMap                                                                   //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def toMap01(): Bool = Result.toMap(Err(-1ii): Result[BigInt, (Unit, Unit)]) == Map#{}
 
-@test
-def lift604(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Ok(123), Ok(1), Ok(2), Err("e1"), Ok(4), Ok(5)) == Err("e1")
+    @test
+    def toMap02(): Bool = Result.toMap(Ok((1, true))) == Map#{1 => true}
 
-@test
-def lift605(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Ok(123), Ok(1), Err("e1"), Ok(3), Ok(4), Ok(5)) == Err("e1")
+    /////////////////////////////////////////////////////////////////////////////
+    // toMapWith                                                               //
+    /////////////////////////////////////////////////////////////////////////////
 
-@test
-def lift606(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Ok(123), Err("e1"), Ok(2), Ok(3), Ok(4), Ok(5)) == Err("e1")
+    @test
+    def toMapWith01(): Bool =
+        Result.toMapWith(x -> 0 * x, Err(1)) == Map#{}
 
-@test
-def lift607(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Err("e1"), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5)) == Err("e1")
+    @test
+    def toMapWith02(): Bool =
+        Result.toMapWith(x -> 0 * x, Ok(1)) == Map#{1 => 0}
 
-@test
-def lift608(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Err("e1"), Err("e2"), Err("e3"), Err("e4"), Err("e5"), Err("e6"): Result[Int32, String]) == Err("e1")
+    @test
+    def toMapWith03(): Bool =
+        Result.toMapWith(x -> 2 * x, Ok(1)) == Map#{1 => 2}
 
-/////////////////////////////////////////////////////////////////////////////
-// lift7                                                                   //
-/////////////////////////////////////////////////////////////////////////////
+    @test
+    def toMapWith04(): Bool =
+        Result.toMapWith(x -> x + 10, Ok(1)) == Map#{1 => 11}
 
-@test
-def lift701(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6)): Result[_, Unit] == Ok(144)
+    @test
+    def toMapWith05(): Bool =
+        Result.toMapWith(x -> x + "b", Ok("a")) == Map#{"a" => "ab"}
 
-@test
-def lift702(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Err("e1")) == Err("e1")
+    /////////////////////////////////////////////////////////////////////////////
+    // toOption                                                                //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def toOption01(): Bool = Result.toOption(Err(-1ii): Result[BigInt, Unit]) == None
 
-@test
-def lift703(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Err("e1"), Ok(6)) == Err("e1")
+    @test
+    def toOption02(): Bool = Result.toOption(Ok(1)) == Some(1)
 
-@test
-def lift704(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Ok(1), Ok(2), Ok(3), Err("e1"), Ok(5), Ok(6)) == Err("e1")
+    /////////////////////////////////////////////////////////////////////////////
+    // forEach                                                                 //
+    /////////////////////////////////////////////////////////////////////////////
 
-@test
-def lift705(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Ok(1), Ok(2), Err("e1"), Ok(4), Ok(5), Ok(6)) == Err("e1")
+    @test
+    def forEach01(): Bool = region r {
+        let ri = ref 21 @ r;
+        Result.forEach(x -> ri := x, Ok(42): Result[Int32, Int32]);
+        42 == deref ri
+    }
 
-@test
-def lift706(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Ok(1), Err("e1"), Ok(3), Ok(4), Ok(5), Ok(6)) == Err("e1")
+    @test
+    def forEach02(): Bool = region r {
+        let ri = ref 21 @ r;
+        Result.forEach(x -> ri := x, Err(42): Result[Int32, Int32]);
+        21 == deref ri
+    }
 
-@test
-def lift707(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Err("e1"), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6)) == Err("e1")
+    /////////////////////////////////////////////////////////////////////////////
+    // ap                                                                      //
+    /////////////////////////////////////////////////////////////////////////////
+    @test
+    def ap01(): Bool = Result.ap(Ok(x -> x + 1), Ok(123)): Result[String, Int32] == Ok(124)
 
-@test
-def lift708(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Err("e1"), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6)) == Err("e1")
+    @test
+    def ap02(): Bool = Result.ap(Ok(x -> x + 1), Err("b")) == Err("b")
 
-@test
-def lift709(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Err("e1"), Err("e2"), Err("e3"), Err("e4"), Err("e5"), Err("e6"), Err("e7"): Result[Int32, String]) == Err("e1")
+    @test
+    def ap03(): Bool = Result.ap(Err("a"), Ok(123)): Result[String, Int32] == Err("a")
 
-/////////////////////////////////////////////////////////////////////////////
-// lift8                                                                   //
-/////////////////////////////////////////////////////////////////////////////
+    @test
+    def ap04(): Bool = Result.ap(Err("a"), Err("b")): Result[String, Int32] == Err("a")
 
-@test
-def lift801(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7)): Result[_, Unit] == Ok(151)
+    /////////////////////////////////////////////////////////////////////////////
+    // lift2                                                                   //
+    /////////////////////////////////////////////////////////////////////////////
 
-@test
-def lift802(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Err("e1")) == Err("e1")
+    @test
+    def lift201(): Bool = Result.lift2((x1,x2) -> x1 + x2, Ok(123), Ok(1)): Result[String, Int32] == Ok(124)
 
-@test
-def lift803(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Err("e1"), Ok(7)) == Err("e1")
+    @test
+    def lift202(): Bool = Result.lift2((x1,x2) -> x1 + x2, Ok(123), Err("e1")) == Err("e1")
 
-@test
-def lift804(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Err("e1"), Ok(6), Ok(7)) == Err("e1")
+    @test
+    def lift203(): Bool = Result.lift2((x1,x2) -> x1 + x2, Err("e1"), Ok(1)) == Err("e1")
 
-@test
-def lift805(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Ok(2), Ok(3), Err("e1"), Ok(5), Ok(6), Ok(7)) == Err("e1")
+    @test
+    def lift204(): Bool = Result.lift2((x1,x2) -> x1 + x2, Err("e1"), Err("e2"): Result[String, Int32]) == Err("e1")
 
-@test
-def lift806(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Ok(2), Err("e1"), Ok(4), Ok(5), Ok(6), Ok(7)) == Err("e1")
+    /////////////////////////////////////////////////////////////////////////////
+    // lift3                                                                   //
+    /////////////////////////////////////////////////////////////////////////////
 
-@test
-def lift807(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Err("e1"), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7)) == Err("e1")
+    @test
+    def lift301(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Ok(123), Ok(1), Ok(2)): Result[String, Int32] == Ok(126)
 
-@test
-def lift808(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Err("e1"), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7)) == Err("e1")
+    @test
+    def lift302(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Ok(123), Ok(1), Err("e1")) == Err("e1")
 
-@test
-def lift809(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Err("e1"), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7)) == Err("e1")
+    @test
+    def lift303(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Ok(123), Err("e1"), Ok(2)) == Err("e1")
 
-@test
-def lift810(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Err("e1"), Err("e2"), Err("e3"), Err("e4"), Err("e5"), Err("e6"), Err("e7"), Err("e8"): Result[Int32, String]) == Err("e1")
+    @test
+    def lift304(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Err("e1"), Ok(1), Ok(2)) == Err("e1")
 
-/////////////////////////////////////////////////////////////////////////////
-// lift9                                                                   //
-/////////////////////////////////////////////////////////////////////////////
+    @test
+    def lift305(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Ok(123), Err("e1"), Err("e2")) == Err("e1")
 
-@test
-def lift901(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8)): Result[_, Unit] == Ok(159)
+    @test
+    def lift306(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Err("e1"), Ok(1), Err("e2")) == Err("e1")
 
-@test
-def lift902(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Err("e1")) == Err("e1")
+    @test
+    def lift307(): Bool = Result.lift3((x1,x2,x3) -> x1 + x2 + x3, Err("e1"), Err("e2"), Err("e3"): Result[String, Int32]) == Err("e1")
 
-@test
-def lift903(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Err("e1"), Ok(8)) == Err("e1")
+    /////////////////////////////////////////////////////////////////////////////
+    // lift4                                                                   //
+    /////////////////////////////////////////////////////////////////////////////
 
-@test
-def lift904(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Err("e1"), Ok(7), Ok(8)) == Err("e1")
+    @test
+    def lift401(): Bool = Result.lift4((x1,x2,x3,x4) -> x1 + x2 + x3 + x4, Ok(123), Ok(1), Ok(2), Ok(3)): Result[String, Int32] == Ok(129)
 
-@test
-def lift905(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Err("e1"), Ok(6), Ok(7), Ok(8)) == Err("e1")
+    @test
+    def lift402(): Bool = Result.lift4((x1,x2,x3,x4) -> x1 + x2 + x3 + x4, Ok(123), Ok(1), Ok(2), Err("e1")) == Err("e1")
 
-@test
-def lift906(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Ok(3), Err("e1"), Ok(5), Ok(6), Ok(7), Ok(8)) == Err("e1")
+    @test
+    def lift403(): Bool = Result.lift4((x1,x2,x3,x4) -> x1 + x2 + x3 + x4, Ok(123), Ok(1), Err("e1"), Ok(3)) == Err("e1")
 
-@test
-def lift907(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Err("e1"), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8)) == Err("e1")
+    @test
+    def lift404(): Bool = Result.lift4((x1,x2,x3,x4) -> x1 + x2 + x3 + x4, Ok(123), Err("e1"), Ok(2), Ok(3)) == Err("e1")
 
-@test
-def lift908(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Err("e1"), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8)) == Err("e1")
+    @test
+    def lift405(): Bool = Result.lift4((x1,x2,x3,x4) -> x1 + x2 + x3 + x4, Err("e1"), Ok(1), Ok(2), Ok(3)) == Err("e1")
 
-@test
-def lift909(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Err("e1"), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8)) == Err("e1")
+    @test
+    def lift406(): Bool = Result.lift4((x1,x2,x3,x4) -> x1 + x2 + x3 + x4, Err("e1"), Err("e2"), Err("e3"), Err("e4"): Result[String, Int32]) == Err("e1")
 
-@test
-def lift910(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Err("e1"), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8)) == Err("e1")
+    /////////////////////////////////////////////////////////////////////////////
+    // lift5                                                                   //
+    /////////////////////////////////////////////////////////////////////////////
 
-@test
-def lift911(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Err("e1"), Err("e2"), Err("e3"), Err("e4"), Err("e5"), Err("e6"), Err("e7"), Err("e8"), Err("e9"): Result[Int32, String]) == Err("e1")
+    @test
+    def lift501(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4)): Result[String, Int32] == Ok(133)
 
-/////////////////////////////////////////////////////////////////////////////
-// lift10                                                                  //
-/////////////////////////////////////////////////////////////////////////////
+    @test
+    def lift502(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Ok(123), Ok(1), Ok(2), Ok(3), Err("e1")) == Err("e1")
 
-@test
-def lift1001(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8), Ok(9)): Result[_, Unit] == Ok(168)
+    @test
+    def lift503(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Ok(123), Ok(1), Ok(2), Err("e1"), Ok(4)) == Err("e1")
 
-@test
-def lift1002(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8), Err("e1")) == Err("e1")
+    @test
+    def lift504(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Ok(123), Ok(1), Err("e1"), Ok(3), Ok(4)) == Err("e1")
 
-@test
-def lift1003(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Err("e1"), Ok(9)) == Err("e1")
+    @test
+    def lift505(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Ok(123), Err("e1"), Ok(2), Ok(3), Ok(4)) == Err("e1")
 
-@test
-def lift1004(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Err("e1"), Ok(8), Ok(9)) == Err("e1")
+    @test
+    def lift506(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Err("e1"), Ok(1), Ok(2), Ok(3), Ok(4)) == Err("e1")
 
-@test
-def lift1005(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Err("e1"), Ok(7), Ok(8), Ok(9)) == Err("e1")
+    @test
+    def lift507(): Bool = Result.lift5((x1,x2,x3,x4,x5) -> x1 + x2 + x3 + x4 + x5, Err("e1"), Err("e2"), Err("e3"), Err("e4"), Err("e5"): Result[String, Int32]) == Err("e1")
 
-@test
-def lift1006(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Err("e1"), Ok(6), Ok(7), Ok(8), Ok(9)) == Err("e1")
+    /////////////////////////////////////////////////////////////////////////////
+    // lift6                                                                   //
+    /////////////////////////////////////////////////////////////////////////////
 
-@test
-def lift1007(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Err("e1"), Ok(5), Ok(6), Ok(7), Ok(8), Ok(9)) == Err("e1")
+    @test
+    def lift601(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5)): Result[String, Int32] == Ok(138)
 
-@test
-def lift1008(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Err("e1"), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8), Ok(9)) == Err("e1")
+    @test
+    def lift602(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Err("e1")) == Err("e1")
 
-@test
-def lift1009(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Err("e1"), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8), Ok(9)) == Err("e1")
+    @test
+    def lift603(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Ok(123), Ok(1), Ok(2), Ok(3), Err("e1"), Ok(5)) == Err("e1")
 
-@test
-def lift1010(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Err("e1"), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8), Ok(9)) == Err("e1")
+    @test
+    def lift604(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Ok(123), Ok(1), Ok(2), Err("e1"), Ok(4), Ok(5)) == Err("e1")
 
-@test
-def lift1011(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Err("e1"), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8), Ok(9)) == Err("e1")
+    @test
+    def lift605(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Ok(123), Ok(1), Err("e1"), Ok(3), Ok(4), Ok(5)) == Err("e1")
 
-@test
-def lift1012(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Err("e1"), Err("e2"), Err("e3"), Err("e4"), Err("e5"), Err("e6"), Err("e7"), Err("e8"), Err("e9"), Err("e10"): Result[Int32, String]) == Err("e1")
+    @test
+    def lift606(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Ok(123), Err("e1"), Ok(2), Ok(3), Ok(4), Ok(5)) == Err("e1")
+
+    @test
+    def lift607(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Err("e1"), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5)) == Err("e1")
+
+    @test
+    def lift608(): Bool = Result.lift6((x1,x2,x3,x4,x5,x6) -> x1 + x2 + x3 + x4 + x5 + x6, Err("e1"), Err("e2"), Err("e3"), Err("e4"), Err("e5"), Err("e6"): Result[String, Int32]) == Err("e1")
+
+    /////////////////////////////////////////////////////////////////////////////
+    // lift7                                                                   //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def lift701(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6)): Result[String, Int32] == Ok(144)
+
+    @test
+    def lift702(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Err("e1")) == Err("e1")
+
+    @test
+    def lift703(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Err("e1"), Ok(6)) == Err("e1")
+
+    @test
+    def lift704(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Ok(1), Ok(2), Ok(3), Err("e1"), Ok(5), Ok(6)) == Err("e1")
+
+    @test
+    def lift705(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Ok(1), Ok(2), Err("e1"), Ok(4), Ok(5), Ok(6)) == Err("e1")
+
+    @test
+    def lift706(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Ok(1), Err("e1"), Ok(3), Ok(4), Ok(5), Ok(6)) == Err("e1")
+
+    @test
+    def lift707(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Ok(123), Err("e1"), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6)) == Err("e1")
+
+    @test
+    def lift708(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Err("e1"), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6)) == Err("e1")
+
+    @test
+    def lift709(): Bool = Result.lift7((x1,x2,x3,x4,x5,x6,x7) -> x1 + x2 + x3 + x4 + x5 + x6 + x7, Err("e1"), Err("e2"), Err("e3"), Err("e4"), Err("e5"), Err("e6"), Err("e7"): Result[String, Int32]) == Err("e1")
+
+    /////////////////////////////////////////////////////////////////////////////
+    // lift8                                                                   //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def lift801(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7)): Result[String, Int32] == Ok(151)
+
+    @test
+    def lift802(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Err("e1")) == Err("e1")
+
+    @test
+    def lift803(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Err("e1"), Ok(7)) == Err("e1")
+
+    @test
+    def lift804(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Err("e1"), Ok(6), Ok(7)) == Err("e1")
+
+    @test
+    def lift805(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Ok(2), Ok(3), Err("e1"), Ok(5), Ok(6), Ok(7)) == Err("e1")
+
+    @test
+    def lift806(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Ok(2), Err("e1"), Ok(4), Ok(5), Ok(6), Ok(7)) == Err("e1")
+
+    @test
+    def lift807(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Ok(1), Err("e1"), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7)) == Err("e1")
+
+    @test
+    def lift808(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Ok(123), Err("e1"), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7)) == Err("e1")
+
+    @test
+    def lift809(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Err("e1"), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7)) == Err("e1")
+
+    @test
+    def lift810(): Bool = Result.lift8((x1,x2,x3,x4,x5,x6,x7,x8) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8, Err("e1"), Err("e2"), Err("e3"), Err("e4"), Err("e5"), Err("e6"), Err("e7"), Err("e8"): Result[String, Int32]) == Err("e1")
+
+    /////////////////////////////////////////////////////////////////////////////
+    // lift9                                                                   //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def lift901(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8)): Result[String, Int32] == Ok(159)
+
+    @test
+    def lift902(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Err("e1")) == Err("e1")
+
+    @test
+    def lift903(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Err("e1"), Ok(8)) == Err("e1")
+
+    @test
+    def lift904(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Err("e1"), Ok(7), Ok(8)) == Err("e1")
+
+    @test
+    def lift905(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Err("e1"), Ok(6), Ok(7), Ok(8)) == Err("e1")
+
+    @test
+    def lift906(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Ok(3), Err("e1"), Ok(5), Ok(6), Ok(7), Ok(8)) == Err("e1")
+
+    @test
+    def lift907(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Ok(2), Err("e1"), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8)) == Err("e1")
+
+    @test
+    def lift908(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Ok(1), Err("e1"), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8)) == Err("e1")
+
+    @test
+    def lift909(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Ok(123), Err("e1"), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8)) == Err("e1")
+
+    @test
+    def lift910(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Err("e1"), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8)) == Err("e1")
+
+    @test
+    def lift911(): Bool = Result.lift9((x1,x2,x3,x4,x5,x6,x7,x8,x9) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9, Err("e1"), Err("e2"), Err("e3"), Err("e4"), Err("e5"), Err("e6"), Err("e7"), Err("e8"), Err("e9"): Result[String, Int32]) == Err("e1")
+
+    /////////////////////////////////////////////////////////////////////////////
+    // lift10                                                                  //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def lift1001(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8), Ok(9)): Result[String, Int32] == Ok(168)
+
+    @test
+    def lift1002(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8), Err("e1")) == Err("e1")
+
+    @test
+    def lift1003(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Err("e1"), Ok(9)) == Err("e1")
+
+    @test
+    def lift1004(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Err("e1"), Ok(8), Ok(9)) == Err("e1")
+
+    @test
+    def lift1005(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Err("e1"), Ok(7), Ok(8), Ok(9)) == Err("e1")
+
+    @test
+    def lift1006(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Ok(4), Err("e1"), Ok(6), Ok(7), Ok(8), Ok(9)) == Err("e1")
+
+    @test
+    def lift1007(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Ok(3), Err("e1"), Ok(5), Ok(6), Ok(7), Ok(8), Ok(9)) == Err("e1")
+
+    @test
+    def lift1008(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Ok(2), Err("e1"), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8), Ok(9)) == Err("e1")
+
+    @test
+    def lift1009(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Ok(1), Err("e1"), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8), Ok(9)) == Err("e1")
+
+    @test
+    def lift1010(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Ok(123), Err("e1"), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8), Ok(9)) == Err("e1")
+
+    @test
+    def lift1011(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Err("e1"), Ok(1), Ok(2), Ok(3), Ok(4), Ok(5), Ok(6), Ok(7), Ok(8), Ok(9)) == Err("e1")
+
+    @test
+    def lift1012(): Bool = Result.lift10((x1,x2,x3,x4,x5,x6,x7,x8,x9,x10) -> x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + x10, Err("e1"), Err("e2"), Err("e3"), Err("e4"), Err("e5"), Err("e6"), Err("e7"), Err("e8"), Err("e9"), Err("e10"): Result[String, Int32]) == Err("e1")
 
     /////////////////////////////////////////////////////////////////////////////
     // hash                                                                    //
     /////////////////////////////////////////////////////////////////////////////
 
     @test
-    def hash01(): Bool = hash(Err(()): Result[Unit, _]) == hash(Err(()): Result[Unit, _])
+    def hash01(): Bool = hash(Err(()): Result[Unit, Unit]) == hash(Err(()): Result[Unit, Unit])
 
     @test
-    def hash02(): Bool = hash(Ok(()): Result[_, Unit]) != hash(Err(()): Result[Unit, _])
+    def hash02(): Bool = hash(Ok(()): Result[Unit, Unit]) != hash(Err(()): Result[Unit, Unit])
 
     @test
-    def hash03(): Bool = hash(Ok("Success"): Result[_, Unit]) == hash(Ok("Success"): Result[_, Unit])
+    def hash03(): Bool = hash(Ok("Success"): Result[Unit, String]) == hash(Ok("Success"): Result[Unit, String])
 
     @test
-    def hash04(): Bool = hash(Ok("Success"): Result[_, String]) != hash(Err("Error"): Result[String, _])
+    def hash04(): Bool = hash(Ok("Success"): Result[String, String]) != hash(Err("Error"): Result[String, String])
 
     @test
-    def hash05(): Bool = hash(Err(13i8): Result[Unit, _]) != hash(Err(255i16): Result[Unit, _])
+    def hash05(): Bool = hash(Err(13i8): Result[Int8, Unit]) != hash(Err(255i16): Result[Int16, Unit])
+
+
+    /////////////////////////////////////////////////////////////////////////////
+    // iterator                                                              //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def iterator01(): Bool = region r {
+        Err(1): Result[Int32, Int32] |> Result.iterator(r) |> Iterator.toList == Nil
+    }
+
+    @test
+    def iterator02(): Bool = region r {
+        Ok(1) |> Result.iterator(r) |> Iterator.toList == 1 :: Nil
+    }
+
+    @test
+    def iterator03(): Bool = region r {
+        Ok(1 :: 2 :: 3 :: Nil) |> Result.iterator(r) |> Iterator.toList == (1 :: 2 :: 3 :: Nil) :: Nil
+    }
 
 }

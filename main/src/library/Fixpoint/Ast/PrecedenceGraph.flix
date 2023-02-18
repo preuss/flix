@@ -13,44 +13,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-namespace Fixpoint/Ast {
-    pub opaque type PrecedenceGraph = Set[PrecedenceEdge]
 
-    pub enum PrecedenceEdge {
-        case PositiveEdge(PredSym, PredSym)
-        case NegativeEdge(PredSym, PredSym)
+namespace Fixpoint/Ast {
+
+    use Fixpoint/Shared.PredSym
+
+    @Internal
+    pub enum PrecedenceGraph(Set[PrecedenceEdge])
+
+    @Internal
+    pub enum PrecedenceEdge with Eq, Order {
+        case StrongEdge(PredSym, PredSym)
+        case WeakEdge(PredSym, PredSym)
     }
 
     instance Monoid[PrecedenceGraph] {
-        pub def empty(): PrecedenceGraph = PrecedenceGraph(Set.empty())
+        pub def empty(): PrecedenceGraph = PrecedenceGraph.PrecedenceGraph(Set.empty())
+    }
 
+    instance SemiGroup[PrecedenceGraph] {
         pub def combine(x: PrecedenceGraph, y: PrecedenceGraph): PrecedenceGraph = match (x, y) {
-            case (PrecedenceGraph(xs), PrecedenceGraph(ys)) => PrecedenceGraph(Set.union(xs, ys))
+            case (PrecedenceGraph.PrecedenceGraph(xs), PrecedenceGraph.PrecedenceGraph(ys)) => PrecedenceGraph.PrecedenceGraph(Set.union(xs, ys))
         }
-    }
-
-    instance Order[PrecedenceEdge] {
-        pub def compare(a: PrecedenceEdge, b: PrecedenceEdge): Comparison = match (a, b) {
-            case (PositiveEdge(x), PositiveEdge(y)) => x <=> y
-            case (NegativeEdge(x), NegativeEdge(y)) => x <=> y
-            case (NegativeEdge(_), PositiveEdge(_)) => LessThan
-            case (PositiveEdge(_), NegativeEdge(_)) => GreaterThan
-        }
-    }
-
-    pub def mkDepGraph(d: Datalog[v]): PrecedenceGraph = match d {
-        case Datalog(_, rules) => Array.fold(Array.map(precedenceHelper, rules)) as & Pure
-    }
-
-    def precedenceHelper(cnst: Constraint[v]): PrecedenceGraph = match cnst {
-        case Constraint(head, body) => Array.fold(Array.map(mkDepEdge(head), body)) as & Pure
-    }
-
-    def mkDepEdge(dst: HeadPredicate[v], src: BodyPredicate[v]): PrecedenceGraph = match (dst, src) {
-        case (HeadAtom(headSym, _, _), BodyAtom(bodySym, _, Positive, _)) =>
-            PrecedenceGraph(Set#{PositiveEdge(bodySym, headSym)})
-        case (HeadAtom(headSym, _, _), BodyAtom(bodySym, _, Negative, _)) =>
-            PrecedenceGraph(Set#{NegativeEdge(bodySym, headSym)})
-        case _ => PrecedenceGraph(Set#{})
     }
 }

@@ -38,6 +38,8 @@ object MonoType {
 
   case object Float64 extends MonoType
 
+  case object BigDecimal extends MonoType
+
   case object Int8 extends MonoType
 
   case object Int16 extends MonoType
@@ -50,13 +52,13 @@ object MonoType {
 
   case object Str extends MonoType
 
+  case object Region extends MonoType
+
   ///
   /// Compound Types.
   ///
 
   case class Array(tpe: MonoType) extends MonoType
-
-  case class Channel(tpe: MonoType) extends MonoType
 
   case class Lazy(tpe: MonoType) extends MonoType
 
@@ -75,10 +77,6 @@ object MonoType {
   case class SchemaEmpty() extends MonoType
 
   case class SchemaExtend(name: String, tpe: MonoType, rest: MonoType) extends MonoType
-
-  case class Relation(tpes: List[MonoType]) extends MonoType
-
-  case class Lattice(tpes: List[MonoType]) extends MonoType
 
   case class Native(clazz: Class[_]) extends MonoType
 

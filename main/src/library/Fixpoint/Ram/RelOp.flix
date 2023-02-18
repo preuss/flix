@@ -15,31 +15,30 @@
  */
 
 namespace Fixpoint/Ram {
+
+    @Internal
     pub enum RelOp[v] {
         case Search(RowVar, RamSym[v], RelOp[v])
-        case Query(RowVar, RamSym[v], Array[(Int32, RamTerm[v])], RelOp[v])
-        case Project(Array[RamTerm[v]], RamSym[v])
+        case Query(RowVar, RamSym[v], List[(Int32, RamTerm[v])], RelOp[v])
+        case Project(List[RamTerm[v]], RamSym[v])
         case If(List[BoolExp[v]], RelOp[v])
     }
 
-    instance ToString[RelOp[v]] with ToString[v] {
+    instance ToString[RelOp[v]] {
         pub def toString(op: RelOp[v]): String =
-            use Fixpoint.commaSeparate;
             let nl = String.lineSeparator();
             match op {
-                case Search(var, ramSym, body) =>
+                case RelOp.Search(var, ramSym, body) =>
                     "search ${var} ∈ ${ramSym} do${nl}${String.indent(4, "${body}")}end"
-                case Query(var, ramSym, prefixQuery, body) =>
-                    let query = Array.formatWith(match (i, term) -> {
+                case RelOp.Query(var, ramSym, prefixQuery, body) =>
+                    let query = List.joinWith(match (i, term) -> {
                         ToString.toString(BoolExp.Eq(RamTerm.RowLoad(var, i), term))
-                    }, " ∧ ", prefixQuery) as & Pure;
+                    }, " ∧ ", prefixQuery);
                     "query {${var} ∈ ${ramSym} | ${query}} do${nl}${String.indent(4, "${body}")}end"
-                case Project(terms, ramSym) =>
-                    "project (${commaSeparate(terms)}) into ${ramSym}"
-                case If(test, then) =>
-                    let tst =
-                        List.map(ToString.toString, test) |>
-                        String.intercalate(" ∧ ");
+                case RelOp.Project(terms, ramSym) =>
+                    "project (${terms |> List.join(", ")}) into ${ramSym}"
+                case RelOp.If(test, then) =>
+                    let tst = test |> List.join(" ∧ ");
                     "if(${tst}) then${nl}${String.indent(4, "${then}")}end"
             }
     }

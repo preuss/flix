@@ -3,12 +3,12 @@ namespace Test/Dec/TypeAlias {
     /**
      * A type alias for degrees celsius.
      */
-    type alias Celsius = Int
+    type alias Celsius = Int32
 
     /**
      * A type alias for degrees fahrenheit.
      */
-    type alias Fahrenheit = Int
+    type alias Fahrenheit = Int32
 
     /**
      * A type alias for united states dollars.
@@ -23,12 +23,12 @@ namespace Test/Dec/TypeAlias {
     /**
      * A type alias for Option of Int.
      */
-    type alias A = Option[Int]
+    type alias A = Option[Int32]
 
     /**
      * A type alias for a Result.
      */
-    type alias B = Result[Bool, Int]
+    type alias B = Result[Int32, Bool]
 
     /**
      * A polymorphic type alias for a Option.
@@ -43,7 +43,7 @@ namespace Test/Dec/TypeAlias {
     /**
      * A partially polymorphic type alias for a Result.
      */
-    type alias E[a] = Result[a, String]
+    type alias E[a] = Result[String, a]
 
     @test
     def testTypeAlias01(): Celsius = 123
@@ -52,7 +52,7 @@ namespace Test/Dec/TypeAlias {
     def testTypeAlias02(): Fahrenheit = 123
 
     @test
-    def testTypeAlias03(): Int = (123: Celsius) + (123: Fahrenheit)
+    def testTypeAlias03(): Int32 = (123: Celsius) + (123: Fahrenheit)
 
     @test
     def testTypeAlias04(): USD = 123.456
@@ -82,88 +82,85 @@ namespace Test/Dec/TypeAlias {
     def testTypeAlias12(): C[Bool] = Some(true)
 
     @test
-    def testTypeAlias13(): C[Int] = None
+    def testTypeAlias13(): C[Int32] = None
 
     @test
-    def testTypeAlias14(): C[Int] = Some(123)
+    def testTypeAlias14(): C[Int32] = Some(123)
 
     @test
-    def testTypeAlias15(): D[Bool, Int] = Ok(true)
+    def testTypeAlias15(): D[Bool, Int32] = Ok(123)
 
     @test
-    def testTypeAlias16(): D[Bool, Int] = Err(123)
+    def testTypeAlias16(): D[Bool, Int32] = Err(true)
 
     @test
     def testTypeAlias17(): E[Bool] = Ok(true)
 
     @test
-    def testTypeAlias18(): E[Int] = Ok(123)
+    def testTypeAlias18(): E[Int32] = Ok(123)
 
     @test
     def testTypeAlias19(): E[Bool] = Err("Hello World")
 
     @test
-    def testTypeAlias20(): E[Int] = Err("Hello World")
+    def testTypeAlias20(): E[Int32] = Err("Hello World")
 
     /**
-     * An opaque type for Int.
+     * An enum for Int.
      */
-    opaque type X = Int
+    enum X(Int32)
 
     /**
-     * An opaque type for Option.
+     * An enum for Option.
      */
-    opaque type Y[a] = Option[a]
+    enum Y[a](Option[a])
 
     /**
-     * An opaque type for Result.
+     * An enum for Result.
      */
-    opaque type Z[a, b] = Result[a, b]
+    enum Z[a, b](Result[a, b])
 
     /**
-     * A type alias for an opaque type.
+     * A type alias for an enum.
      */
     type alias U = X
 
     /**
-     * A type alias for a polymorphic opaque type.
+     * A type alias for a polymorphic enum.
      */
     type alias V[a] = Y[a]
 
     /**
-     * A type alias for a polymorphic opaque type.
+     * A type alias for a polymorphic enum.
      */
     type alias W[a, b] = Z[a, b]
 
     @test
-    def testTypeAlias21(): U = X(123)
+    def testTypeAlias21(): U = X.X(123)
 
     @test
-    def testTypeAlias22(): V[Bool] = Y(None)
+    def testTypeAlias22(): V[Bool] = Y.Y(None)
 
     @test
-    def testTypeAlias23(): V[Bool] = Y(Some(true))
+    def testTypeAlias23(): V[Bool] = Y.Y(Some(true))
 
     @test
-    def testTypeAlias24(): V[Int] = Y(None)
+    def testTypeAlias24(): V[Int32] = Y.Y(None)
 
     @test
-    def testTypeAlias25(): V[Int] = Y(Some(123))
+    def testTypeAlias25(): V[Int32] = Y.Y(Some(123))
 
     @test
-    def testTypeAlias26(): W[Bool, Int] = Z(Ok(true))
+    def testTypeAlias26(): W[Bool, Int32] = Z.Z(Ok(123))
 
     @test
-    def testTypeAlias27(): W[Bool, Int] = Z(Err(123))
+    def testTypeAlias27(): W[Bool, Int32] = Z.Z(Err(true))
 
-    enum Option[t] {
-        case None,
-        case Some(t)
-    }
+    ///
+    /// Type-level if-then-else
+    ///
+    type alias If[cond: Bool, t: Bool, f: Bool] = (cond and t) or (not cond and f)
 
-    enum Result[t, e] {
-        case Ok(t),
-        case Err(e)
-    }
-
+    @test
+    def testTypeAlias28(): Bool & If[e1, e2, e3] = unsafe_cast true as _ & If[e1, e2, e3]
 }

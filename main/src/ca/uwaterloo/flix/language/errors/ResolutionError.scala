@@ -16,74 +16,24 @@
 
 package ca.uwaterloo.flix.language.errors
 
-import ca.uwaterloo.flix.language.CompilationError
-import ca.uwaterloo.flix.language.ast.{Name, SourceLocation, Symbol, Type}
-import ca.uwaterloo.flix.language.debug.{Audience, FormatKind, FormatType}
-import ca.uwaterloo.flix.util.vt.VirtualString._
-import ca.uwaterloo.flix.util.vt.VirtualTerminal
+import ca.uwaterloo.flix.language.CompilationMessage
+import ca.uwaterloo.flix.language.ast.{Name, SourceLocation, Symbol, UnkindedType}
+import ca.uwaterloo.flix.util.Formatter
 
 import java.lang.reflect.{Constructor, Field, Method}
 
 /**
   * A common super-type for resolution errors.
   */
-sealed trait ResolutionError extends CompilationError {
-  def kind = "Resolution Error"
+sealed trait ResolutionError extends CompilationMessage {
+  val kind = "Resolution Error"
+
+  protected def appendLocations(locs: List[SourceLocation], s: String, formatter: Formatter): String = {
+    locs.map(l => formatter.code(l, s)).mkString(System.lineSeparator() + System.lineSeparator())
+  }
 }
 
 object ResolutionError {
-
-  private implicit val audience: Audience = Audience.External
-
-  /**
-    * Ambiguous Name Error.
-    *
-    * @param qn   the ambiguous name.
-    * @param ns   the current namespace.
-    * @param locs the locations where the names are defined.
-    * @param loc  the location where the error occurred.
-    */
-  case class AmbiguousName(qn: Name.QName, ns: Name.NName, locs: List[SourceLocation], loc: SourceLocation) extends ResolutionError {
-    def summary: String = "Ambiguous name."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Ambiguous name '" << Red(qn.toString) << "' Name refers to multiple definitions." << NewLine
-      vt << NewLine
-      vt << Code(loc, "ambiguous name.") << NewLine
-      vt << NewLine
-      for (loc1 <- locs) {
-        vt << Code(loc1, "definition/effect/signature matches.") << NewLine
-        vt << NewLine
-      }
-      vt
-    }
-  }
-
-  /**
-    * Ambiguous Type Error.
-    *
-    * @param qn   the ambiguous name.
-    * @param ns   the current namespace.
-    * @param locs the locations where the names are defined.
-    * @param loc  the location where the error occurred.
-    */
-  case class AmbiguousType(qn: String, ns: Name.NName, locs: List[SourceLocation], loc: SourceLocation) extends ResolutionError {
-    def summary: String = "Ambiguous type."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Ambiguous type '" << Red(qn) << "'. Name refers to multiple types." << NewLine
-      vt << NewLine
-      vt << Code(loc, "ambiguous type.") << NewLine
-      vt << NewLine
-      for (loc1 <- locs) {
-        vt << Code(loc1, "type matches.") << NewLine
-        vt << NewLine
-      }
-      vt
-    }
-  }
 
   /**
     * Ambiguous Tag Error.
@@ -95,20 +45,25 @@ object ResolutionError {
     */
   case class AmbiguousTag(tag: String, ns: Name.NName, locs: List[SourceLocation], loc: SourceLocation) extends ResolutionError {
     def summary: String = "Ambiguous tag."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Ambiguous tag '" << Red(tag) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "ambiguous tag name.") << NewLine
-      vt << NewLine
-      vt << "The tag is defined in multiple enums:" << NewLine
-      vt << NewLine
-      for (l <- locs) {
-        vt << Code(l, "tag is defined in this enum.") << NewLine
-      }
-      vt << Underline("Tip:") << " Prefix the tag with the enum name." << NewLine
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Ambiguous tag '${red(tag)}'.
+         |
+         |${code(loc, "ambiguous tag name.")}
+         |
+         |The tag is defined in multiple enums:
+         |
+         |${appendLocations(locs, "tag is defined in this enum.", formatter)}
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Prefix the tag with the enum name."
+    })
+
   }
 
   /**
@@ -117,79 +72,52 @@ object ResolutionError {
     * @param tpe the illegal type.
     * @param loc the location where the error occurred.
     */
-  case class IllegalType(tpe: Type, loc: SourceLocation) extends ResolutionError {
+  case class IllegalType(tpe: UnkindedType, loc: SourceLocation) extends ResolutionError {
     def summary: String = "Illegal type."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Illegal type: '" << Red(FormatType.formatType(tpe)) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "illegal type.") << NewLine
+
+    // TODO need to format ill-kinded type!
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Illegal type: '${red(tpe.toString)}'.
+         |
+         |${code(loc, "illegal type.")}
+         |""".stripMargin
     }
+
+    /**
+      * Returns a formatted string with helpful suggestions.
+      */
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
-    * Illegal Uninhabited Type Error.
-    * @param tpe the uninhabited type.
+    * Illegal Non-Java Type Error.
+    *
+    * @param tpe the illegal type.
     * @param loc the location where the error occurred.
     */
-  case class IllegalUninhabitedType(tpe: Type, loc: SourceLocation) extends ResolutionError {
-    override def summary: String = "Illegal uninhabited type."
-    override def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Illegal uninhabited type: '" << Red(FormatType.formatType(tpe)) << "' with kind '" << Red(FormatKind.formatKind(tpe.kind)) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "uninhabited type.")
-      vt << NewLine
-      vt << Underline("Tip:") << " Types in this location must be inhabited."
-      vt << "     Ensure the type has the correct number of parameters."
+  case class IllegalNonJavaType(tpe: UnkindedType, loc: SourceLocation) extends ResolutionError {
+    def summary: String = "Illegal non-Java type. Expected class or interface type."
+
+    // TODO need to format unkinded types!
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Unexpected non-Java type: '${red(tpe.toString)}'.
+         |
+         |${code(loc, "unexpected type.")}
+         |
+         |Expected a Java class or interface.
+         |""".stripMargin
     }
+
+    /**
+      * Returns a formatted string with helpful suggestions.
+      */
+    def explain(formatter: Formatter): Option[String] = None
   }
 
-  /**
-    * Illegal Type Application Error.
-    * @param tpe1 the type used as a type constructor.
-    * @param tpe2 the type used as an argument.
-    * @param loc the location where the error occurred.
-    */
-  case class IllegalTypeApplication(tpe1: Type, tpe2: Type, loc: SourceLocation) extends ResolutionError {
-    override def summary: String = "Illegal type application."
-    override def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Illegal type application: '" << Red(FormatType.formatType(tpe1)) << "' applied to '" << Red(FormatType.formatType(tpe2)) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "illegal type application.")
-      vt << NewLine
-      vt << "Type constructor kind: '" << Red(FormatKind.formatKind(tpe1.kind)) << "'."
-      vt << "Argument kind: '" << Red(FormatKind.formatKind(tpe2.kind)) << "'."
-      vt << NewLine
-      vt << "Possible fixes:" << NewLine
-      vt << NewLine
-      vt << "  (1)  Ensure the first type is a type constructor." << NewLine
-      vt << "  (2)  Ensure the type has the correct number of parameters." << NewLine
-      vt << "  (3)  Ensure the type constructor accepts the given argument kinds." << NewLine
-    }
-  }
-
-  /**
-    * Illegal effect error.
-    * @param tpe the type used as an effect.
-    * @param loc the location where the error occured.
-    */
-  case class IllegalEffect(tpe: Type, loc: SourceLocation) extends ResolutionError {
-    override def summary: String = "Illegal effect."
-    override def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Illegal effect: '"  << FormatType.formatType(tpe) << "'."
-      vt << NewLine
-      vt << Code(loc, "illegal effect.")
-      vt << NewLine
-      vt << Underline("Tip:") << " Effect types must be of boolean kind (Pure/Impure)."
-    }
-  }
 
   /**
     * Inaccessible Class Error.
@@ -200,15 +128,22 @@ object ResolutionError {
     */
   case class InaccessibleClass(sym: Symbol.ClassSym, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
     def summary: String = "Inaccessible."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Class'" << Red(sym.toString) << s"' is not accessible from the namespace '" << Cyan(ns.toString) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "inaccessible class.") << NewLine
-      vt << NewLine
-      vt << Underline("Tip:") << " Mark the class as public." << NewLine
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Class '${red(sym.toString)}' is not accessible from the namespace '${cyan(ns.toString)}'.
+         |
+         |${code(loc, "inaccessible class.")}
+         |
+         |""".stripMargin
+
     }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Mark the class as public."
+    })
   }
 
   /**
@@ -220,15 +155,22 @@ object ResolutionError {
     */
   case class SealedClass(sym: Symbol.ClassSym, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
     def summary: String = "Sealed."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Class '" << Red(sym.toString) << s"' is sealed from the namespace '" << Cyan(ns.toString) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "sealed class.") << NewLine
-      vt << NewLine
-      vt << Underline("Tip:") << " Move the instance or sub class to the class's namespace." << NewLine
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Class '${red(sym.toString)}' is sealed from the namespace '${cyan(ns.toString)}'.
+         |
+         |${code(loc, "sealed class.")}
+         |
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Move the instance or sub class to the class's namespace."
+    })
+
   }
 
   /**
@@ -240,15 +182,22 @@ object ResolutionError {
     */
   case class InaccessibleDef(sym: Symbol.DefnSym, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
     def summary: String = "Inaccessible."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Definition '" << Red(sym.toString) << s"' is not accessible from the namespace '" << Cyan(ns.toString) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "inaccessible definition.") << NewLine
-      vt << NewLine
-      vt << Underline("Tip:") << " Mark the definition as public." << NewLine
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Definition '${red(sym.toString)}' is not accessible from the namespace '${cyan(ns.toString)}'.
+         |
+         |${code(loc, "inaccessible definition.")}
+         |
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Mark the definition as public."
+    })
+
   }
 
   /**
@@ -260,15 +209,47 @@ object ResolutionError {
     */
   case class InaccessibleSig(sym: Symbol.SigSym, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
     def summary: String = "Inaccessible."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Definition '" << Red(sym.toString) << s"' is not accessible from the namespace '" << Cyan(ns.toString) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "inaccessible definition.") << NewLine
-      vt << NewLine
-      vt << Underline("Tip:") << " Mark the definition as public." << NewLine
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Definition '${red(sym.toString)}' is not accessible from the namespace '${cyan(ns.toString)}'.
+         |
+         |${code(loc, "inaccessible definition.")}
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Mark the definition as public."
+    })
+
+  }
+
+  /**
+    * Inaccessible Op Error.
+    *
+    * @param sym the sig symbol.
+    * @param ns  the namespace where the symbol is not accessible.
+    * @param loc the location where the error occurred.
+    */
+  case class InaccessibleOp(sym: Symbol.OpSym, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
+    def summary: String = "Inaccessible."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Operation '${red(sym.toString)}' is not accessible from the namespace '${cyan(ns.toString)}'.
+         |
+         |${code(loc, "inaccessible operation.")}
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Mark the operation as public."
+    })
+
   }
 
   /**
@@ -280,35 +261,172 @@ object ResolutionError {
     */
   case class InaccessibleEnum(sym: Symbol.EnumSym, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
     def summary: String = "Inaccessible."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Enum '" << Red(sym.toString) << s"' is not accessible from the namespace '" << Cyan(ns.toString) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "inaccessible enum.") << NewLine
-      vt << NewLine
-      vt << Underline("Tip:") << " Mark the definition as public." << NewLine
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Enum '${red(sym.toString)}' is not accessible from the namespace '${cyan(ns.toString)}'.
+         |
+         |${code(loc, "inaccessible enum.")}
+         |
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Mark the definition as public."
+    })
+
   }
 
   /**
-    * Recursion Limit Error.
+    * Inaccessible Restrictable Enum Error.
     *
-    * @param ident the type alias symbol.
-    * @param limit the current recursion limit.
-    * @param loc   the location where the error occurred.
+    * @param sym the enum symbol.
+    * @param ns  the namespace where the symbol is not accessible.
+    * @param loc the location where the error occurred.
     */
-  case class RecursionLimit(ident: Symbol.TypeAliasSym, limit: Int, loc: SourceLocation) extends ResolutionError {
-    def summary: String = s"Recursion limit $limit reached while unfolding the ${ident.name} type alias."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Recursion limit (" << limit << ") reached while unfolding the '" << Red(ident.name) << "' type alias." << NewLine
-      vt << NewLine
-      vt << Code(loc, "recursion limit reached.") << NewLine
-      vt << NewLine
-      vt << "Ensure that there is no cyclic definition of type aliases."
+  case class InaccessibleRestrictableEnum(sym: Symbol.RestrictableEnumSym, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
+    def summary: String = "Inaccessible."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Enum '${red(sym.toString)}' is not accessible from the namespace '${cyan(ns.toString)}'.
+         |
+         |${code(loc, "inaccessible enum.")}
+         |
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Mark the definition as public."
+    })
+
+  }
+
+  /**
+    * Opaque Enum Error.
+    *
+    * @param sym the enum symbol.
+    * @param ns  the namespace from which the enum is opaque.
+    * @param loc the location where the error occurred.
+    */
+  case class OpaqueEnum(sym: Symbol.EnumSym, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
+    def summary: String = "Opaque."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Enum '${red(sym.toString)}' is opaque from the namespace '${cyan(ns.toString)}'.
+         |
+         |${code(loc, "opaque enum.")}
+         |
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"""Opaque enums cannot be constructed or destructed outside their declaring namespace.
+         |
+         |${underline("Tip:")} Use helper functions from the enum's namespace.
+         |""".stripMargin
+    })
+
+  }
+
+  /**
+    * Inaccessible Type Alias Error.
+    *
+    * @param sym the type alias symbol.
+    * @param ns  the namespace where the symbol is not accessible.
+    * @param loc the location where the error occurred.
+    */
+  case class InaccessibleTypeAlias(sym: Symbol.TypeAliasSym, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
+    def summary: String = s"Inaccessible type alias ${sym.name}"
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Type alias '${red(sym.toString)}' is not accessible from the namespace '${cyan(ns.toString)}'.
+         |
+         |${code(loc, "inaccessible type alias.")}
+         |
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Mark the definition as public."
+    })
+
+  }
+
+  /**
+    * Inaccessible Effect Error.
+    *
+    * @param sym the type alias symbol.
+    * @param ns  the namespace where the symbol is not accessible.
+    * @param loc the location where the error occurred.
+    */
+  case class InaccessibleEffect(sym: Symbol.EffectSym, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
+    def summary: String = s"Inaccessible effect alias ${sym.name}"
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Effect '${red(sym.toString)}' is not accessible from the namespace '${cyan(ns.toString)}'.
+         |
+         |${code(loc, "inaccessible effect.")}
+         |
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Mark the definition as public."
+    })
+
+  }
+
+  /**
+    * An error raise to indicate a cycle in type aliases.
+    *
+    * @param path the type reference path from a type alias to itself.
+    * @param loc  the location where the error occurred.
+    */
+  case class CyclicTypeAliases(path: List[Symbol.TypeAliasSym], loc: SourceLocation) extends ResolutionError {
+    private val fullCycle = path.last :: path
+
+    def summary: String = {
+      val pathString = fullCycle.map(alias => s"'${alias.name}'").mkString(" references ")
+      "Cyclic type aliases: " + pathString
+    }
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |
+         |${code(loc, "Cyclic type aliases.")}
+         |
+         |The following type aliases are in the cycle:
+         |$appendCycles
+         |""".stripMargin
+    }
+
+    private def appendCycles: String = {
+      var res = ""
+      for (List(subClass, superClass) <- fullCycle.sliding(2)) {
+        res += s"$subClass references $superClass" + System.lineSeparator()
+      }
+      res
+    }
+
+    /**
+      * Returns a formatted string with helpful suggestions.
+      */
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
@@ -316,40 +434,74 @@ object ResolutionError {
     *
     * @param qn  the unresolved name.
     * @param ns  the current namespace.
+    * @param env the variables in the scope.
     * @param loc the location where the error occurred.
     */
-  case class UndefinedName(qn: Name.QName, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
-    def summary: String = "Undefined name."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Undefined name '" << Red(qn.toString) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "name not found") << NewLine
-      vt << NewLine
-      vt << Underline("Tip:") << " Possible typo or non-existent definition?" << NewLine
+  case class UndefinedName(qn: Name.QName, ns: Name.NName, env: Map[String, Symbol.VarSym], loc: SourceLocation) extends ResolutionError {
+    def summary: String = s"Undefined name: '${qn.toString}'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Undefined name '${red(qn.toString)}'.
+         |
+         |${code(loc, "name not found")}
+         |
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Possible typo or non-existent definition?"
+    })
+
   }
 
   /**
-    * Undefined Sig Error.
+    * An error raised to indicate that the local variable was not found.
     *
-    * @param clazz  the class.
-    * @param sig    the unresolved sig.
-    * @param ns     the current namespace.
-    * @param loc    the location where the error occurred.
+    * @param name the name of the variable.
+    * @param loc  the location of the undefined variable.
     */
-  case class UndefinedSig(clazz: Name.QName, sig: Name.Ident, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
-    def summary: String = "Undefined signature."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Undefined signature '" << Red(sig.name) << "' in class '" << Red(clazz.toString) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "signature not found") << NewLine
-      vt << NewLine
-      vt << Underline("Tip:") << " Possible typo or non-existent class or signature?" << NewLine
+  case class UndefinedVar(name: String, loc: SourceLocation) extends ResolutionError {
+    def summary: String = s"Undefined variable '$name'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Undefined variable '${red(name)}'.
+         |
+         |${code(loc, "undefined variable.")}
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      "Flix cannot find the variable. Maybe there is a typo?"
+    })
+  }
+
+  /**
+    * An error raised to indicate that the type variable was not found.
+    *
+    * @param name the name of the type variable.
+    * @param loc  the location of the undefined type variable.
+    */
+  case class UndefinedTypeVar(name: String, loc: SourceLocation) extends ResolutionError {
+    def summary: String = s"Undefined type variable '$name'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Undefined type variable '${red(name)}'.
+         |
+         |${code(loc, "undefined type variable.")}
+         |""".stripMargin
+
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      "Flix cannot find the type variable. Maybe there is a typo?"
+    })
   }
 
   /**
@@ -360,16 +512,75 @@ object ResolutionError {
     * @param loc the location where the error occurred.
     */
   case class UndefinedClass(qn: Name.QName, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
-    def summary: String = "Undefined class."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Undefined class '" << Red(qn.toString) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "class not found") << NewLine
-      vt << NewLine
-      vt << Underline("Tip:") << " Possible typo or non-existent class?" << NewLine
+    def summary: String = s"Undefined class: '${qn.toString}'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Undefined class '${red(qn.toString)}'.
+         |
+         |${code(loc, "class not found")}
+         |
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Possible typo or non-existent class?"
+    })
+
+  }
+
+  /**
+    * Undefined Op Error.
+    *
+    * @param qname the qualified name of the operation.
+    * @param loc   the location where the error occurred.
+    */
+  case class UndefinedOp(qname: Name.QName, loc: SourceLocation) extends ResolutionError {
+    def summary: String = s"Undefined operation '${qname.toString}'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Undefined operation '${red(qname.toString)}'.
+         |
+         |${code(loc, "operation not found")}
+         |
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Possible typo or non-existent operation?"
+    })
+  }
+
+  /**
+    * Undefined Effect Error.
+    *
+    * @param qn  the unresolved effect.
+    * @param ns  the current namespace.
+    * @param loc the location where the error occurred.
+    */
+  case class UndefinedEffect(qn: Name.QName, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
+    def summary: String = s"Undefined effect '${qn.toString}'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Undefined effect '${red(qn.toString)}'.
+         |
+         |${code(loc, "effect not found")}
+         |
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Possible typo or non-existent effect?"
+    })
+
   }
 
   /**
@@ -380,16 +591,23 @@ object ResolutionError {
     * @param loc the location where the error occurred.
     */
   case class UndefinedTag(tag: String, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
-    def summary: String = "Undefined tag."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Undefined tag '" << Red(tag) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "tag not found.") << NewLine
-      vt << NewLine
-      vt << Underline("Tip:") << " Possible typo or non-existent tag?" << NewLine
+    def summary: String = s"Undefined tag: '${tag}'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Undefined tag '${red(tag)}'.
+         |
+         |${code(loc, "tag not found.")}
+         |
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Possible typo or non-existent tag?"
+    })
+
   }
 
   /**
@@ -400,16 +618,23 @@ object ResolutionError {
     * @param loc the location where the error occurred.
     */
   case class UndefinedType(qn: Name.QName, ns: Name.NName, loc: SourceLocation) extends ResolutionError {
-    def summary: String = "Undefined type"
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Undefined type '" << Red(qn.toString) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "type not found.") << NewLine
-      vt << NewLine
-      vt << Underline("Tip:") << " Possible typo or non-existent type?" << NewLine
+    def summary: String = s"Undefined type: '${qn.toString}'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Undefined type '${red(qn.toString)}'.
+         |
+         |${code(loc, "type not found.")}
+         |
+         |""".stripMargin
     }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Possible typo or non-existent type?"
+    })
+
   }
 
   /**
@@ -419,13 +644,25 @@ object ResolutionError {
     * @param loc  the location of the class name.
     */
   case class UndefinedJvmClass(name: String, loc: SourceLocation) extends ResolutionError {
-    def summary: String = "Undefined class."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Undefined class '" << Red(name) << "'." << NewLine
-      vt << NewLine
-      vt << Code(loc, "undefined class.") << NewLine
+    def summary: String = s"Undefined Java class: '${name}'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Undefined Java class '${red(name)}'.
+         |
+         |${code(loc, "undefined class.")}
+         |""".stripMargin
+    }
+
+    /**
+      * Returns a formatted string with helpful suggestions.
+      */
+    def explain(formatter: Formatter): Option[String] = {
+      if (raw".*\.[A-Z].*\.[A-Z].*".r matches name)
+        Some(s"Static nested classes should be specified using '$$', e.g. java.util.Locale$$Builder")
+      else
+        None
     }
   }
 
@@ -439,20 +676,34 @@ object ResolutionError {
     */
   case class UndefinedJvmConstructor(className: String, signature: List[Class[_]], constructors: List[Constructor[_]], loc: SourceLocation) extends ResolutionError {
     def summary: String = "Undefined constructor."
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      vt << ">> Undefined constructor in class '" << Cyan(className) << "' with the given signature." << NewLine
-      vt << NewLine
-      vt << Code(loc, "undefined constructor.") << NewLine
-      vt << "No constructor matches the signature:" << NewLine
-      vt << "  " << className << "(" << signature.map(_.toString).mkString(",") << ")" << NewLine << NewLine
-      vt << "Available constructors:" << NewLine
-      for (constructor <- constructors) {
-        vt << "  " << stripAccessModifier(constructor.toString) << NewLine
-      }
-      vt
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Undefined constructor in class '${cyan(className)}' with the given signature.
+         |
+         |${code(loc, "undefined constructor.")}
+         |No constructor matches the signature:
+         |  $className (${signature.map(_.toString).mkString(",")})
+         |
+         |Available constructors:
+         |$appendConstructors
+         |""".stripMargin
     }
+
+
+    private def appendConstructors: String = {
+      var res = ""
+      for (constructor <- constructors) {
+        res += "  " + stripAccessModifier(constructor.toString) + System.lineSeparator()
+      }
+      res
+    }
+
+    /**
+      * Returns a formatted string with helpful suggestions.
+      */
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
@@ -474,24 +725,64 @@ object ResolutionError {
       }
     }
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      if (!static) {
-        vt << ">> Undefined " << Magenta("object") << " method '" << Red(methodName) << "' in class '" << Cyan(className) << "." << NewLine
-      } else {
-        vt << ">> Undefined " << Magenta("static") << " method '" << Red(methodName) << "' in class '" << Cyan(className) << "." << NewLine
-      }
-      vt << NewLine
-      vt << Code(loc, "undefined method.") << NewLine
-      vt << "No method matches the signature:" << NewLine
-      vt << "  " << methodName << "(" << signature.map(_.toString).mkString(",") << ")" << NewLine << NewLine
-      vt << "Available methods:" << NewLine
-      for (method <- methods) {
-        vt << "  " << stripAccessModifier(method.toString) << NewLine
-      }
-      vt
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Undefined ${magenta(keyword)} method '${red(methodName)}' in class '${cyan(className)}'.
+         |
+         |${code(loc, "undefined method.")}
+         |No method matches the signature:
+         |  $methodName(${signature.map(_.toString).mkString(",")})
+         |
+         |
+         |Available methods:
+         |$appendMethods
+         |""".stripMargin
     }
+
+    private def keyword: String = {
+      if (static) "static" else "object"
+    }
+
+    private def appendMethods: String = {
+      methods.map(m => "  " + stripAccessModifier(m.toString) + System.lineSeparator()).mkString
+    }
+
+    /**
+      * Returns a formatted string with helpful suggestions.
+      */
+    def explain(formatter: Formatter): Option[String] = None
+  }
+
+  /**
+    * An error raised to indicate that the method return type doesn't match.
+    *
+    * @param className    the class name.
+    * @param methodName   the method name.
+    * @param declaredType the declared type.
+    * @param expectedType the expected type.
+    * @param loc          the location of the method name.
+    */
+  case class MismatchingReturnType(className: String, methodName: String, declaredType: UnkindedType, expectedType: UnkindedType, loc: SourceLocation) extends ResolutionError {
+    def summary: String = {
+      s"Mismatching return type."
+    }
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+        >> Mismatched return type for method '${red(methodName)}' in class '${cyan(className)}'.
+         |
+         |${code(loc, "mismatched return type.")}
+         |Declared type: ${declaredType.toString}
+         |Expected type: ${expectedType.toString}
+         |""".stripMargin
+    }
+
+    /**
+      * Returns a formatted string with helpful suggestions.
+      */
+    def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
@@ -512,22 +803,57 @@ object ResolutionError {
       }
     }
 
-    def message: VirtualTerminal = {
-      val vt = new VirtualTerminal
-      vt << Line(kind, source.format) << NewLine
-      if (!static) {
-        vt << ">> Undefined " << Magenta("object") << " field '" << Red(fieldName) << "' in class '" << Cyan(className) << "." << NewLine
-      } else {
-        vt << ">> Undefined " << Magenta("static") << " field '" << Red(fieldName) << "' in class '" << Cyan(className) << "." << NewLine
-      }
-      vt << NewLine
-      vt << Code(loc, "undefined field.") << NewLine
-      vt << "Available fields:" << NewLine
-      for (field <- fields) {
-        vt << "  " << stripAccessModifier(field.toString) << NewLine
-      }
-      vt
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Undefined ${magenta(keyword)} field '${red(fieldName)}' in class '${cyan(className)}'.
+         |
+         |${code(loc, "undefined field.")}
+         |Available fields:
+         |$appendFields
+         |""".stripMargin
     }
+
+    private def keyword: String = {
+      if (static) "static" else "object"
+    }
+
+    private def appendFields: String = {
+      fields.map(f => "  " + stripAccessModifier(f.toString) + System.lineSeparator()).mkString
+    }
+
+    /**
+      * Returns a formatted string with helpful suggestions.
+      */
+    def explain(formatter: Formatter): Option[String] = None
+  }
+
+  /**
+    * An error raised to indicate that a JVM class's dependency is missing.
+    *
+    * @param className  the name of the class.
+    * @param dependency the full path of the dependency.
+    * @param loc        the location where the error occurred.
+    */
+  case class MissingJvmDependency(className: String, dependency: String, loc: SourceLocation) extends ResolutionError {
+    override def summary: String = s"Missing dependency ${dependency} for JVM class ${className}."
+
+    /**
+      * Returns the formatted error message.
+      */
+    override def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Missing dependency ${dependency} for JVM class '${cyan(className)}'.
+         |
+         |${code(loc, s"missing dependency ${dependency}.")}
+         |""".stripMargin
+    }
+
+    /**
+      * Returns a formatted string with helpful suggestions.
+      */
+    override def explain(formatter: Formatter): Option[String] = None
   }
 
   /**
@@ -537,23 +863,197 @@ object ResolutionError {
     * @param loc  the location where the error occurred.
     */
   case class CyclicClassHierarchy(path: List[Symbol.ClassSym], loc: SourceLocation) extends ResolutionError {
+    private val fullCycle = path.last :: path
+
     override def summary: String = {
-      val pathString = path.reverse.map(clazz => s"'${clazz.name}'").mkString(" extends ")
+      val pathString = fullCycle.map(clazz => s"'${clazz.name}'").mkString(" extends ")
       "Cyclic inheritance: " + pathString
     }
 
-    override def message: VirtualTerminal = {
-      val vt = new VirtualTerminal()
-      vt << Line(kind, source.format) << NewLine
-      vt << NewLine
-      vt << Code(loc, "Cyclic inheritance.") << NewLine
-      vt << NewLine
-      vt << "The following classes are in the cycle:"
-      for (List(subClass, superClass) <- path.reverse.sliding(2)) {
-        vt << s"$subClass extends $superClass" << NewLine
-      }
-      vt
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |
+         |${code(loc, "Cyclic inheritance.")}
+         |
+         |The following classes are in the cycle:
+         |
+         |$cyclicClasses
+         |""".stripMargin
     }
+
+    private def cyclicClasses: String = {
+      var res = ""
+      for (List(subClass, superClass) <- fullCycle.sliding(2)) {
+        res += s"$subClass extends $superClass" + System.lineSeparator()
+      }
+      res
+    }
+
+    /**
+      * Returns a formatted string with helpful suggestions.
+      */
+    def explain(formatter: Formatter): Option[String] = None
+  }
+
+  /**
+    * An error raised to indicate a duplicate derivation.
+    *
+    * @param sym  the class symbol of the duplicate derivation.
+    * @param loc1 the location of the first occurrence.
+    * @param loc2 the location of the second occurrence.
+    */
+  case class DuplicateDerivation(sym: Symbol.ClassSym, loc1: SourceLocation, loc2: SourceLocation) extends ResolutionError {
+    override def summary: String = s"Duplicate derivation: ${sym.name}"
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Duplicate derivation '${red(sym.name)}'.
+         |
+         |${code(loc1, "the first occurrence was here.")}
+         |
+         |${code(loc2, "the second occurrence was here.")}
+         |
+         |""".stripMargin
+    }
+
+    override def loc: SourceLocation = loc1
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Remove one of the occurrences."
+    })
+
+  }
+
+  /**
+    * An error raised to indicate an illegal derivation.
+    *
+    * @param sym       the class symbol of the illegal derivation.
+    * @param legalSyms the list of class symbols of legal derivations.
+    * @param loc       the location where the error occurred.
+    */
+  case class IllegalDerivation(sym: Symbol.ClassSym, legalSyms: List[Symbol.ClassSym], loc: SourceLocation) extends ResolutionError {
+    override def summary: String = s"Illegal derivation: ${sym.name}"
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Illegal derivation '${red(sym.name)}'.
+         |
+         |${code(loc, "Illegal derivation.")}
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Only the following classes may be derived: ${legalSyms.map(_.name).mkString(", ")}."
+    })
+
+  }
+
+  /**
+    * An error raised to indicate an under-applied type alias.
+    *
+    * @param sym the type alias.
+    * @param loc the location where the error occurred.
+    */
+  case class UnderAppliedTypeAlias(sym: Symbol.TypeAliasSym, loc: SourceLocation) extends ResolutionError {
+    override def summary: String = s"Under-applied type alias: ${sym.name}"
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Under-applied type alias '${red(sym.name)}'.
+         |
+         |${code(loc, "Under-applied type alias.")}
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      import formatter._
+      s"${underline("Tip:")} Type aliases must be fully applied."
+    })
+
+  }
+
+  /**
+    * An error raised to indicate that a signature does not include the class's type parameter.
+    *
+    * @param sym the symbol of the signature.
+    * @param loc the location where the error occurred.
+    */
+  case class IllegalSignature(sym: Symbol.SigSym, loc: SourceLocation) extends ResolutionError {
+    def summary: String = s"Unexpected signature which does not mention the type variable of the class."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Unexpected signature '${red(sym.name)}' which does not mention the type variable of the class.
+         |
+         |${code(loc, "unexpected signature.")}
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      "Every signature in a type class must mention the type variable of the class."
+    })
+
+  }
+
+  /**
+    * An error raised to indicate that a wildcard type is used in an illegal position.
+    *
+    * @param ident the name of the wildcard type.
+    * @param loc   the location where the error occurred.
+    */
+  case class IllegalWildType(ident: Name.Ident, loc: SourceLocation) extends ResolutionError {
+    def summary: String = s"Illegal wildcard type: '$ident'."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Illegal wildcard type: '$ident'.
+         |
+         |${code(loc, "illegal wildcard type.")}
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      "Wildcard types (types starting with an underscore) are not allowed in this position."
+    })
+  }
+
+  /**
+    * An error raised to indicate that a choose* expression is missing a tag.
+    *
+    * @param loc the location where the error occurred.
+    */
+  case class MissingRestrictableTag(loc: SourceLocation) extends ResolutionError {
+    def summary: String = "Missing tag for choose* expression."
+
+    def message(formatter: Formatter): String = {
+      import formatter._
+      s"""${line(kind, source.name)}
+         |>> Missing tag.
+         |
+         |${code(loc, "missing tag.")}
+         |""".stripMargin
+    }
+
+    def explain(formatter: Formatter): Option[String] = Some({
+      """The expression in a choose* rule must either be a tag or an 'of' expression.
+        |
+        |For example:
+        |
+        |choose* e {
+        |    case E1    => E1         // OK
+        |    case E2(x) => E2 of f(x) // OK
+        |    case E3(y) => y          // Not OK. Should be (e.g.) 'E3 of y'
+        |}
+        |""".stripMargin
+    })
   }
 
   /**

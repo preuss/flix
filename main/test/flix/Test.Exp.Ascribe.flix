@@ -34,11 +34,15 @@ namespace Test/Exp/Ascribe {
     def testAscribe11(): BigInt = 0ii : BigInt
 
     @test
-    def testAscribe12(): String = "hello world" : String
+    def testAscribe12(): BigDecimal = 0.0ff : BigDecimal
 
     @test
-    def testAscribe13(): (Int, Int, Int) = (1, 2, 3) : (Int, Int, Int)
+    def testAscribe13(): String = "hello world" : String
 
     @test
-    def testAscribe14(): Option[Int] = Some(42) : Option[Int]
+    def testAscribe14(): (Int32, Int32, Int32) = (1, 2, 3) : (Int32, Int32, Int32)
+
+    @test
+    def testAscribe15(): Option[Int32] = Some(42) : Option[Int32]
+
 }

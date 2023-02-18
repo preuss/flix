@@ -31,59 +31,49 @@ object Command {
   case object Nop extends Command
 
   /**
-    * Executes the main function.
-    */
-  case object Run extends Command
-
-  /**
-    * Shows the context for the given hole `fqn`.
-    */
-  case class Hole(fqnOpt: Option[String]) extends Command
-
-  /**
-    * Shows the definitions, relations, and lattices in the given namespace.
-    */
-  case class Browse(ns: Option[String]) extends Command
-
-  /**
-    * Show the documentation for the given fully-qualified name.
-    */
-  case class Doc(fqn: String) extends Command
-
-  /**
-    * Searches for a definition symbol which contains `needle` as part of its name.
-    */
-  case class Search(needle: String) extends Command
-
-  /**
     * Reloads all source paths.
     */
   case object Reload extends Command
 
   /**
-    * Runs all benchmarks in the program.
+    * Displays documentation about the fqn s
     */
-  case object Benchmark extends Command
+  case class Doc(s: String) extends Command
 
   /**
-    * Runs all unit tests in the program.
+    * Creates a new project in the current directory
+    */
+  case object Init extends Command
+
+  /**
+    * Checks the current project for errors.
+    */
+  case object Check extends Command
+
+  /**
+    * Builds the current project.
+    */
+  case object Build extends Command
+
+  /**
+    * Builds a jar file from the current project.
+    */
+  case object Jar extends Command
+
+  /**
+    * Builds an fpkg file from the current project.
+    */
+  case object Fpkg extends Command
+
+  /**
+    * Runs the benchmarks for the current project.
+    */
+  case object Bench extends Command
+
+  /**
+    * Runs the tests for the current project.
     */
   case object Test extends Command
-
-  /**
-    * Warms up the compiler.
-    */
-  case object Warmup extends Command
-
-  /**
-    * Watches source paths for changes.
-    */
-  case object Watch extends Command
-
-  /**
-    * Unwatches source paths for changes.
-    */
-  case object Unwatch extends Command
 
   /**
     * Terminates the shell.
@@ -99,6 +89,16 @@ object Command {
     * Praise Le Toucan.
     */
   case object Praise extends Command
+
+  /**
+    * Eval source code.
+    */
+  case class Eval(s: String) extends Command
+
+  /**
+    * Reload and eval source code.
+    */
+  case class ReloadAndEval(s: String) extends Command
 
   /**
     * Unknown command.
@@ -122,92 +122,67 @@ object Command {
       return Command.Nop
 
     //
-    // Run
-    //
-    if (input.startsWith(":run"))
-      return Command.Run
-
-    //
-    // Hole
-    //
-    if (input.startsWith(":hole")) {
-      val fqn = input.substring(":hole".length).trim
-      if (fqn.isEmpty)
-        return Command.Hole(None)
-      else
-        return Command.Hole(Some(fqn))
-    }
-
-    //
-    // Browse
-    //
-    if (input.startsWith(":browse")) {
-      if (input.trim == ":browse") {
-        return Command.Browse(None)
-      }
-      val ns = input.substring(":browse".length).trim
-      return Command.Browse(Some(ns))
-    }
-
-    //
-    // Doc
-    //
-    if (input.startsWith(":doc ")) {
-      val fqn = input.substring(":doc ".length).trim
-      if (fqn.isEmpty) {
-        terminal.writer().println("Missing argument for command :doc.")
-        return Command.Nop
-      }
-      return Command.Doc(fqn)
-    }
-
-    //
-    // Search
-    //
-    if (input.startsWith(":search ")) {
-      val needle = input.substring(":search ".length).trim
-      if (needle.isEmpty) {
-        terminal.writer().println("Missing argument for command :search.")
-        return Command.Nop
-      }
-      return Command.Search(needle)
-    }
-
-    //
     // Reload
     //
     if (input == ":r" || input == ":reload")
       return Command.Reload
 
     //
-    // Benchmark
+    // Doc
     //
-    if (input == ":benchmark")
-      return Command.Benchmark
+    val docPattern = raw":d(oc)?\s+(\S+)\s*".r
+    input match {
+      case docPattern(_, s) => return Command.Doc(s)
+      case _ => // no-op
+    }
+
+    //
+    // Init
+    //
+    if (input == ":init")
+      return Command.Init
+
+    //
+    // Check
+    //
+    if (input == ":check" || input == ":c")
+      return Command.Check
+
+    //
+    // Build
+    //
+    if (input == ":build" || input == ":b")
+      return Command.Build
+
+    //
+    // Jar
+    //
+    if (input == ":build-jar" || input == ":jar")
+      return Command.Jar
+
+    //
+    // Fpkg
+    //
+    if (input == ":build-pkg" || input == ":pkg")
+      return Command.Fpkg
+
+    //
+    // Bench
+    //
+    if (input == ":benchmark" || input == ":bench")
+      return Command.Bench
+
+    //
+    // Eval
+    //
+    if (input.startsWith(":eval"))
+      return Command.ReloadAndEval(input.drop(":eval".length + 1))
 
     //
     // Test
     //
-    if (input == ":test")
+    if (input == ":test" || input == ":t")
       return Command.Test
-
-    //
-    // Warmup
-    //
-    if (input == ":warmup")
-      return Command.Warmup
-
-    //
-    // Watch
-    //
-    if (input == ":watch" || input == ":w")
-      return Command.Watch
-
-    //
-    // Unwatch
-    //
-    if (input == ":unwatch")
-      return Command.Unwatch
 
     //
     // Quit
@@ -227,7 +202,13 @@ object Command {
     if (input == ":praise")
       return Command.Praise
 
-    Command.Unknown(input)
+    //
+    // Eval or Unknown?
+    //
+    if (input.startsWith(":"))
+      Command.Unknown(input)
+    else
+      Command.Eval(input)
   }
 
 }

@@ -16,7 +16,7 @@
 
 namespace TestHash {
 
-    use Hash.hash;
+    use Hash.hash
 
     /////////////////////////////////////////////////////////////////////////////
     // Unit                                                                    //
@@ -97,6 +97,25 @@ namespace TestHash {
 
     @test
     def float64Hash05(): Bool = hash(123.1f64) != hash(124.1f64)
+
+    /////////////////////////////////////////////////////////////////////////////
+    // BigDecimal                                                              //
+    /////////////////////////////////////////////////////////////////////////////
+
+    @test
+    def bigDecimalHash01(): Bool = hash(123.0ff) == hash(123.0ff)
+
+    @test
+    def bigDecimalHash02(): Bool = hash(123.0ff) != hash(124.0ff)
+
+    @test
+    def bigDecimalHash03(): Bool = hash(123.0ff) != hash(124.0ff)
+
+    @test
+    def bigDecimalHash04(): Bool = hash(0.0ff) == hash(0.0ff)
+
+    @test
+    def bigDecimalHash05(): Bool = hash(123.1ff) != hash(124.1ff)
 
     /////////////////////////////////////////////////////////////////////////////
     // Int8                                                                    //
@@ -310,7 +329,7 @@ namespace TestHash {
 
     @test
     def tuple6Hash05(): Bool =
-        hash((true, true, false, false, 'x', "%")) != hash((false, true, false, false, 'x', "%"))
+        hash((true, true, false, false, 'x', "rem")) != hash((false, true, false, false, 'x', "rem"))
 
     /////////////////////////////////////////////////////////////////////////////
     // Tuple7                                                                  //
@@ -334,7 +353,7 @@ namespace TestHash {
 
     @test
     def tuple7Hash05(): Bool =
-        hash((true, true, false, false, 'x', "%", (1, 1, true))) != hash((false, true, false, false, 'x', "%", (1, 1, true)))
+        hash((true, true, false, false, 'x', "rem", (1, 1, true))) != hash((false, true, false, false, 'x', "rem", (1, 1, true)))
 
     /////////////////////////////////////////////////////////////////////////////
     // Tuple8                                                                  //
@@ -358,7 +377,7 @@ namespace TestHash {
 
     @test
     def tuple8Hash05(): Bool =
-        hash((true, true, false, false, 'x', "%", (1, 1, true), (1, 2, 3, 9, 8))) != hash((false, true, false, false, 'x', "%", (1, 1, true), (1, 2, 3, 9, 8)))
+        hash((true, true, false, false, 'x', "rem", (1, 1, true), (1, 2, 3, 9, 8))) != hash((false, true, false, false, 'x', "rem", (1, 1, true), (1, 2, 3, 9, 8)))
 
     /////////////////////////////////////////////////////////////////////////////
     // Tuple9                                                                  //
@@ -382,7 +401,7 @@ namespace TestHash {
 
     @test
     def tuple9Hash05(): Bool =
-        hash((true, true, false, false, 'x', "%", (1, 1, true), (1, 2, 3, 9, 8), '_')) != hash((false, true, false, false, 'x', "%", (1, 1, true), (1, 2, 3, 9, 8), '_'))
+        hash((true, true, false, false, 'x', "rem", (1, 1, true), (1, 2, 3, 9, 8), '_')) != hash((false, true, false, false, 'x', "rem", (1, 1, true), (1, 2, 3, 9, 8), '_'))
 
     /////////////////////////////////////////////////////////////////////////////
     // Tuple10                                                                 //
@@ -398,14 +417,14 @@ namespace TestHash {
 
     @test
     def tuple10Hash03(): Bool =
-        hash((1, 2, 3, 4, 5, (1, 2), (1, 2, 3), (1, 2, 3, 4, 5), 'a', Map#{1 -> 2, 2 -> 1})) != hash((1, 2, 4, 3, 5, (2, 1), (1, 3, 2), (1, 2, 3, "a", "b"), 'a', Map#{1 -> 2, 2 -> 1}))
+        hash((1, 2, 3, 4, 5, (1, 2), (1, 2, 3), (1, 2, 3, 4, 5), 'a', Map#{1 => 2, 2 => 1})) != hash((1, 2, 4, 3, 5, (2, 1), (1, 3, 2), (1, 2, 3, "a", "b"), 'a', Map#{1 => 2, 2 => 1}))
 
     @test
     def tuple10Hash04(): Bool =
-        hash((133i16, 'x', "a", 0, true, (1, 2, 4, 5), 1337, false, (1, 3, 'a', 'z'), Map#{1 -> 2, 2 -> 1})) == hash((133i16, 'x', "a", 0, true, (1, 2, 4, 5), 1337, false, (1, 3, 'a', 'z'), Map#{1 -> 2, 2 -> 1}))
+        hash((133i16, 'x', "a", 0, true, (1, 2, 4, 5), 1337, false, (1, 3, 'a', 'z'), Map#{1 => 2, 2 => 1})) == hash((133i16, 'x', "a", 0, true, (1, 2, 4, 5), 1337, false, (1, 3, 'a', 'z'), Map#{1 => 2, 2 => 1}))
 
     @test
     def tuple10Hash05(): Bool =
-        hash((true, true, false, false, 'x', "%", (1, 1, true), (1, 2, 3, 9, 8), '_', "tired")) != hash((false, true, false, false, 'x', "%", (1, 1, true), (1, 2, 3, 9, 8), '_', "tired"))
+        hash((true, true, false, false, 'x', "rem", (1, 1, true), (1, 2, 3, 9, 8), '_', "tired")) != hash((false, true, false, false, 'x', "rem", (1, 1, true), (1, 2, 3, 9, 8), '_', "tired"))
 
 }

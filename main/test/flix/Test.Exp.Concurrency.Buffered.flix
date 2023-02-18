@@ -1,199 +1,230 @@
 namespace Test/Exp/Concurrency/Buffered {
 
     @test
-    def testBufferedChannel01(): Bool & Impure =
-        let c = chan Unit 1;
-        c <- ();
-        () == <- c
+    def testBufferedChannel01(): Bool \ {} = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        Channel.send((), tx);
+        () == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel02(): Bool & Impure =
-        let c = chan Bool 1;
-        c <- true;
-        true == <- c
+    def testBufferedChannel02(): Bool \ {} = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        Channel.send(true, tx);
+        true == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel03(): Bool & Impure =
-        let c = chan Float32 1;
-        c <- 123.456f32;
-        123.456f32 == <- c
+    def testBufferedChannel03(): Bool \ {} = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        Channel.send(123.456f32, tx);
+        123.456f32 == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel04(): Bool & Impure =
-        let c = chan Float64 1;
-        c <- 123.456f64;
-        123.456f64 == <- c
+    def testBufferedChannel04(): Bool \ {} = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        Channel.send(123.456f64, tx);
+        123.456f64 == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel05(): Bool & Impure =
-        let c = chan Int8 1;
-        c <- 42i8;
-        42i8 == <- c
+    def testBufferedChannel05(): Bool \ {} = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        Channel.send(42i8, tx);
+        42i8 == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel06(): Bool & Impure =
-        let c = chan Int16 1;
-        c <- 42i16;
-        42i16 == <- c
+    def testBufferedChannel06(): Bool \ {} = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        Channel.send(42i16, tx);
+        42i16 == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel07(): Bool & Impure =
-        let c = chan Int32 1;
-        c <- 42i32;
-        42i32 == <- c
+    def testBufferedChannel07(): Bool \ {} = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        Channel.send(42i32, tx);
+        42i32 == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel08(): Bool & Impure =
-        let c = chan Int64 1;
-        c <- 42i64;
-        42i64 == <- c
+    def testBufferedChannel08(): Bool \ {} = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        Channel.send(42i64, tx);
+        42i64 == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel09(): Bool & Impure =
-        let c = chan BigInt 1;
-        c <- 42ii;
-        42ii == <- c
+    def testBufferedChannel09(): Bool \ {} = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        Channel.send(42ii, tx);
+        42ii == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel10(): Bool & Impure =
-        let c = chan String 1;
-        c <- "Hello World!";
-        "Hello World!" == <- c
+    def testBufferedChannel10(): Bool \ {} = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        Channel.send("Hello World!", tx);
+        "Hello World!" == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel11(): Bool & Impure =
-        let c = chan Option[Int] 1;
-        c <- None;
-        None == <- c
+    def testBufferedChannel11(): Bool \ {} = region r {
+        let (tx, rx): (Sender[Option[Int32], _], Receiver[Option[Int32], _]) = Channel.buffered(r, 1);
+        Channel.send(None, tx);
+        None == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel12(): Bool & Impure =
-        let c = chan Option[Int] 1;
-        c <- Some(123);
-        Some(123) == <- c
+    def testBufferedChannel12(): Bool \ {} = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        Channel.send(Some(123), tx);
+        Some(123) == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel13(): Bool & Impure =
-        let c = chan Result[Int, String] 1;
-        c <- Ok(123);
-        Ok(123) == <- c
+    def testBufferedChannel13(): Bool \ {} = region r {
+        let (tx, rx): (Sender[Result[String, Int32], _], Receiver[Result[String, Int32], _]) = Channel.buffered(r, 1);
+        Channel.send(Ok(123), tx);
+        Ok(123) == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel14(): Bool & Impure =
-        let c = chan Result[Int, String] 1;
-        c <- Err("Goodbye World!");
-        Err("Goodbye World!") == <- c
+    def testBufferedChannel14(): Bool \ {} = region r {
+        let (tx, rx): (Sender[Result[String, Int32], _], Receiver[Result[String, Int32], _]) = Channel.buffered(r, 1);
+        Channel.send(Err("Goodbye World!"), tx);
+        Err("Goodbye World!") == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannel15(): Bool & Impure =
-        let c = chan Array[Int] 1;
-        c <- [1, 2, 3];
-        2 == (<- c)[1]
+    def testBufferedChannel15(): Bool \ {} = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        Channel.unsafeSend(Array#{1, 2, 3} @ r, tx);
+        2 == Array.get(1, Channel.recv(rx))
+    }
 
     @test
-    def testBufferedChannel16(): Bool & Impure =
-        let c1 = chan Channel[Int] 1;
-        let c2 = chan Int 1;
-        c1 <- c2;
-        c2 <- 42;
-        42 == <- <- c1
+    def testBufferedChannel16(): Bool \ {} = region r {
+        let (tx1, rx1) = Channel.buffered(r, 1);
+        let (tx2, rx2) = Channel.buffered(r, 1);
+        Channel.unsafeSend(rx2, tx1);
+        Channel.send(42, tx2);
+        42 == Channel.recv(Channel.recv(rx1))
+    }
 
     @test
-    def testBufferedChannelWithSpawn01(): Bool & Impure =
-        let c = chan Unit 1;
-        spawn c <- ();
-        () == <- c
+    def testBufferedChannelWithSpawn01(): Bool \ IO = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        spawn Channel.send((), tx) @ r;
+        () == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn02(): Bool & Impure =
-        let c = chan Bool 1;
-        spawn c <- true;
-        true == <- c
+    def testBufferedChannelWithSpawn02(): Bool \ IO = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        spawn Channel.send(true, tx) @ r;
+        true == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn03(): Bool & Impure =
-        let c = chan Float32 1;
-        spawn c <- 123.456f32;
-        123.456f32 == <- c
+    def testBufferedChannelWithSpawn03(): Bool \ IO = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        spawn Channel.send(123.456f32, tx) @ r;
+        123.456f32 == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn04(): Bool & Impure =
-        let c = chan Float64 1;
-        spawn c <- 123.456f64;
-        123.456f64 == <- c
+    def testBufferedChannelWithSpawn04(): Bool \ IO = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        spawn Channel.send(123.456f64, tx) @ r;
+        123.456f64 == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn05(): Bool & Impure =
-        let c = chan Int8 1;
-        spawn c <- 42i8;
-        42i8 == <- c
+    def testBufferedChannelWithSpawn05(): Bool \ IO = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        spawn Channel.send(42i8, tx) @ r;
+        42i8 == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn06(): Bool & Impure =
-        let c = chan Int16 1;
-        spawn c <- 42i16;
-        42i16 == <- c
+    def testBufferedChannelWithSpawn06(): Bool \ IO = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        spawn Channel.send(42i16, tx) @ r;
+        42i16 == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn07(): Bool & Impure =
-        let c = chan Int32 1;
-        spawn c <- 42i32;
-        42i32 == <- c
+    def testBufferedChannelWithSpawn07(): Bool \ IO = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        spawn Channel.send(42i32, tx) @ r;
+        42i32 == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn08(): Bool & Impure =
-        let c = chan Int64 1;
-        spawn c <- 42i64;
-        42i64 == <- c
+    def testBufferedChannelWithSpawn08(): Bool \ IO = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        spawn Channel.send(42i64, tx) @ r;
+        42i64 == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn09(): Bool & Impure =
-        let c = chan BigInt 1;
-        spawn c <- 42ii;
-        42ii == <- c
+    def testBufferedChannelWithSpawn09(): Bool \ IO = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        spawn Channel.send(42ii, tx) @ r;
+        42ii == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn10(): Bool & Impure =
-        let c = chan String 1;
-        spawn c <- "Hello World!";
-        "Hello World!" == <- c
+    def testBufferedChannelWithSpawn10(): Bool \ IO = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        spawn Channel.send("Hello World!", tx) @ r;
+        "Hello World!" == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn11(): Bool & Impure =
-        let c = chan Option[Int] 1;
-        spawn c <- None;
-        None == <- c
+    def testBufferedChannelWithSpawn11(): Bool \ IO = region r {
+        let (tx, rx): (Sender[Option[Int32], _], Receiver[Option[Int32], _]) = Channel.buffered(r, 1);
+        spawn Channel.send(None, tx) @ r;
+        None == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn12(): Bool & Impure =
-        let c = chan Option[Int] 1;
-        spawn c <- Some(123);
-        Some(123) == <- c
+    def testBufferedChannelWithSpawn12(): Bool \ IO = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        spawn Channel.send(Some(123), tx) @ r;
+        Some(123) == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn13(): Bool & Impure =
-        let c = chan Result[Int, String] 1;
-        spawn c <- Ok(123);
-        Ok(123) == <- c
+    def testBufferedChannelWithSpawn13(): Bool \ IO = region r {
+        let (tx, rx): (Sender[Result[String, Int32], _], Receiver[Result[String, Int32], _]) = Channel.buffered(r, 1);
+        spawn Channel.send(Ok(123), tx) @ r;
+        Ok(123) == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn14(): Bool & Impure =
-        let c = chan Result[Int, String] 1;
-        spawn c <- Err("Goodbye World!");
-        Err("Goodbye World!") == <- c
+    def testBufferedChannelWithSpawn14(): Bool \ IO = region r {
+        let (tx, rx): (Sender[Result[String, Int32], _], Receiver[Result[String, Int32], _]) = Channel.buffered(r, 1);
+        spawn Channel.send(Err("Goodbye World!"), tx) @ r;
+        Err("Goodbye World!") == Channel.recv(rx)
+    }
 
     @test
-    def testBufferedChannelWithSpawn15(): Bool & Impure =
-        let c = chan Array[Int] 1;
-        spawn c <- [1, 2, 3];
-        2 == (<- c)[1]
+    def testBufferedChannelWithSpawn15(): Bool \ IO = region r {
+        let (tx, rx) = Channel.buffered(r, 1);
+        spawn Channel.unsafeSend(Array#{1, 2, 3} @ r, tx) @ r;
+        2 == Array.get(1, Channel.recv(rx))
+    }
 
     @test
-    def testBufferedChannelWithSpawn16(): Bool & Impure =
-        let c1 = chan Channel[Int] 1;
-        let c2 = chan Int 1;
-        spawn c1 <- c2;
-        spawn c2 <- 42;
-        42 == <- <- c1
-
+    def testBufferedChannelWithSpawn16(): Bool \ IO = region r {
+        let (tx1, rx1) = Channel.buffered(r, 1);
+        let (tx2, rx2) = Channel.buffered(r, 1);
+        spawn Channel.unsafeSend(rx2, tx1) @ r;
+        spawn Channel.send(42, tx2) @ r;
+        42 == Channel.recv(Channel.recv(rx1))
+    }
 }

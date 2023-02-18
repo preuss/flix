@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
+use Bool.{==>, <==>}
+
 ///
 /// A type class for equality and inequality.
 ///
-pub class Eq[a] {
+pub lawful class Eq[a] {
 
     ///
     /// Returns `true` if and only if `x` is equal to `y`.
@@ -72,6 +74,11 @@ instance Eq[Float32] {
 instance Eq[Float64] {
     pub def eq(x: Float64, y: Float64): Bool = $FLOAT64_EQ$(x, y)
     pub override def neq(x: Float64, y: Float64): Bool = $FLOAT64_NEQ$(x, y)
+}
+
+instance Eq[BigDecimal] {
+    pub def eq(x: BigDecimal, y: BigDecimal): Bool = $BIGDECIMAL_EQ$(x, y)
+    pub override def neq(x: BigDecimal, y: BigDecimal): Bool = $BIGDECIMAL_NEQ$(x, y)
 }
 
 instance Eq[Int8] {
